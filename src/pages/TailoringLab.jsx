@@ -1,89 +1,121 @@
 import { useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useUser } from '../context/UserContext'
-import { JOBS } from './Discover'
 
+// ─── Skill extraction from free-text description ──────────────────────────
+const KNOWN_SKILLS = [
+  'python', 'javascript', 'typescript', 'react', 'java', 'sql', 'excel',
+  'powerpoint', 'figma', 'machine learning', 'data analysis', 'leadership',
+  'project management', 'agile', 'aws', 'communication', 'finance', 'marketing',
+  'research', 'design', 'analytics', 'c++', 'node.js', 'tableau', 'r', 'matlab',
+  'tensorflow', 'pandas', 'consulting', 'strategy', 'operations', 'ux', 'ui',
+  'product management', 'git', 'docker', 'kubernetes', 'scala', 'go', 'rust',
+]
+
+function extractSkills(description = '', max = 6) {
+  const lower = description.toLowerCase()
+  const found = KNOWN_SKILLS.filter((s) => lower.includes(s))
+  return found.length ? found.slice(0, max) : ['analysis', 'communication', 'excel', 'teamwork', 'research', 'organisation']
+}
+
+// ─── Document generators ──────────────────────────────────────────────────
 function generateCV(user, job) {
   const name = user.name || 'Your Name'
   const country = user.country || 'your country'
-  return `${name.toUpperCase()}
-${country} · linkedin.com/in/${name.toLowerCase().replace(/\s/g, '-')} · your@email.com
+  const sector = user.sector || 'professional'
+  const skills = job.keywords?.slice(0, 6) ?? extractSkills(job.description)
+  const slug = name.toLowerCase().replace(/\s+/g, '-')
 
-─────────────────────────────────────────────
+  return `${name.toUpperCase()}
+${country}  ·  linkedin.com/in/${slug}  ·  your@email.com
+
+──────────────────────────────────────────────────
 
 PROFESSIONAL SUMMARY
-Results-driven ${user.sector || 'professional'} with hands-on experience in ${job.keywords.slice(0, 3).join(', ')} seeking the ${job.title} role at ${job.company}. Passionate about delivering high-impact work and growing within a world-class team. Proven ability to adapt quickly, collaborate cross-functionally, and ship work that matters.
+Motivated ${sector} professional with a strong foundation in ${skills.slice(0, 3).join(', ')}, seeking the ${job.title} role at ${job.company}. Proven ability to deliver high-impact work in collaborative environments, with a track record of taking ownership and driving results. Eager to contribute to ${job.company}'s mission and grow within a world-class team.
 
-─────────────────────────────────────────────
+──────────────────────────────────────────────────
 
 EDUCATION
-BSc ${user.sector || 'Computer Science'} — University Name
-Expected Graduation: 2025 | GPA: 3.8 / 4.0
-Relevant coursework: ${job.keywords.slice(3, 6).join(', ')}
+BSc ${sector === 'Technology' ? 'Computer Science' : sector === 'Finance' ? 'Economics & Finance' : sector}
+University of [Name]  ·  Expected 2025  ·  GPA: 3.8 / 4.0
+Relevant coursework: ${skills.slice(2, 5).join(', ')}
 
-─────────────────────────────────────────────
+──────────────────────────────────────────────────
 
 EXPERIENCE
 
-${job.sectors[0]} Analyst Intern — Previous Company, ${country}
+${sector} Analyst Intern — [Previous Company], ${country}
 Jun 2024 – Sep 2024
-• Delivered [key project] that improved team efficiency by 25%, collaborating with 3 cross-functional stakeholders
-• Analysed datasets of 50k+ records using ${job.keywords[0]} and ${job.keywords[1] || 'relevant tools'}, presenting findings to senior management
-• Reduced process turnaround time by 18% through automation of reporting workflows
+• Delivered [key project] improving team efficiency by 25%, working cross-functionally with 3 departments
+• Analysed datasets of 50k+ records using ${skills[0]} and ${skills[1] || 'relevant tools'}, presenting insights to senior management
+• Reduced reporting turnaround by 18% through workflow automation and process documentation
 
-University Project Lead — [University Name]
+Project Lead — [University Name]
 Oct 2023 – May 2024
-• Led a team of 4 to build a ${job.keywords[0]}-based tool used by 200+ students
-• Presented results at faculty showcase; awarded Best Project in ${user.sector || 'department'}
+• Led a team of 4 to build a ${skills[0]}-based solution adopted by 200+ students
+• Presented findings at faculty showcase and awarded Best Project in ${sector}
+• Coordinated stakeholder interviews, sprint planning, and final delivery under tight deadlines
 
-─────────────────────────────────────────────
+──────────────────────────────────────────────────
 
 SKILLS
-Technical: ${job.keywords.slice(0, 5).join(', ')}
-Languages: English (fluent), ${country === 'Italy' ? 'Italian (native)' : 'native language (native)'}
-Tools: Microsoft Office, Google Workspace, Notion
+Technical:  ${skills.join('  ·  ')}
+Languages:  English (fluent)${country === 'Italy' ? '  ·  Italian (native)' : ''}
+Tools:      Microsoft Office  ·  Google Workspace  ·  Notion  ·  Slack
 
-─────────────────────────────────────────────
+──────────────────────────────────────────────────
 
 ACHIEVEMENTS & ACTIVITIES
-• ${job.company} Virtual Experience Program — Top 10% of participants
+• ${job.company} Virtual Experience Programme — Top 10% of global participants (2024)
 • Hackathon Winner — [Event Name], ${country}, 2024
-• Student ${user.sector || 'Society'} Committee — Organised 3 events for 100+ attendees`
+• ${sector} Society, Committee Member — Organised 3 events, 100+ attendees`
 }
 
 function generateCoverLetter(user, job) {
   const name = user.name || 'Your Name'
   const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+  const skills = job.keywords?.slice(0, 3) ?? extractSkills(job.description, 3)
+  const descriptionSnippet = job.description
+    ? job.description.split('.')[0].toLowerCase()
+    : `${job.title} excellence`
+
   return `${name}
-${user.country || 'your country'} · your@email.com
+${user.country || 'your country'}  ·  your@email.com
 
 ${today}
 
 Hiring Team
-${job.title} — ${job.company}
-${job.location}
+${job.title}
+${job.company}${job.location ? ` — ${job.location}` : ''}
 
-─────────────────────────────────────────────
+──────────────────────────────────────────────────
 
 Dear Hiring Manager,
 
-I am writing to apply for the ${job.title} position at ${job.company}. Having closely followed ${job.company}'s work — particularly its impact on ${job.description.split('.')[0].toLowerCase()} — I am eager to contribute my skills in ${job.keywords.slice(0, 3).join(', ')} to your team.
+I am writing to express my strong interest in the ${job.title} position at ${job.company}. Having closely followed ${job.company}'s work — in particular its focus on ${descriptionSnippet} — I am genuinely excited about the opportunity to contribute my skills in ${skills.join(', ')} to your team.
 
-During my time as an intern at [Previous Company], I gained direct experience with ${job.keywords[0]} and ${job.keywords[1] || 'relevant technologies'}, delivering projects that improved team efficiency by 25%. I thrive in environments where precision, creativity, and collaboration intersect — which is exactly what ${job.company}'s culture embodies. I am particularly drawn to this role because it sits at the intersection of ${job.sectors.join(' and ')}, an area I have been developing expertise in throughout my academic and professional journey.
+During my internship at [Previous Company], I gained hands-on experience with ${skills[0]} and ${skills[1] || 'related tools'}, delivering a project that improved team efficiency by 25%. I am someone who takes ownership from day one, works well in cross-functional teams, and is not afraid to ask the right questions. These qualities, combined with my deep interest in ${user.sector || job.title.split(' ')[0]}, make me confident I can add real value at ${job.company} from the very start.
 
-I would be excited to bring my drive, attention to detail, and genuine passion for ${user.sector || job.sectors[0]} to the ${job.company} team. I am available for an interview at your convenience and look forward to the opportunity to discuss how I can contribute.
+I would welcome the chance to discuss how my background and drive align with what your team is building. I am available for an interview at your convenience and look forward to hearing from you.
 
 Warm regards,
 ${name}`
 }
 
+// ─── Main component ───────────────────────────────────────────────────────
 export default function TailoringLab() {
   const { user } = useUser()
-  const [selectedJobId, setSelectedJobId] = useState('')
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  // Job pre-selected from Discover via navigate state
+  const incomingJob = location.state?.job ?? null
+
+  const [selectedJob, setSelectedJob] = useState(incomingJob)
   const [activeTab, setActiveTab] = useState('cv')
   const [generated, setGenerated] = useState(null)
   const [loading, setLoading] = useState(false)
-
-  const selectedJob = JOBS.find((j) => j.id === Number(selectedJobId))
 
   const handleGenerate = () => {
     if (!selectedJob) return
@@ -95,7 +127,14 @@ export default function TailoringLab() {
         cover: generateCoverLetter(user, selectedJob),
       })
       setLoading(false)
-    }, 1200)
+    }, 1400)
+  }
+
+  const handleClear = () => {
+    setSelectedJob(null)
+    setGenerated(null)
+    // Clear navigation state so Back doesn't re-inject the job
+    navigate('/dashboard/tailoring-lab', { replace: true, state: {} })
   }
 
   return (
@@ -103,62 +142,97 @@ export default function TailoringLab() {
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-apex-text">Tailoring Lab</h1>
         <p className="text-apex-muted mt-1">
-          Select a job and let APEX generate a tailored CV and cover letter
+          Generate a tailored CV and cover letter for any job in seconds
         </p>
       </div>
 
-      {/* Job selector */}
+      {/* Job selection panel */}
       <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-        <label className="block text-sm font-medium text-apex-text mb-2">
-          Select a job to tailor for
-        </label>
-        <div className="flex gap-3">
-          <select
-            value={selectedJobId}
-            onChange={(e) => {
-              setSelectedJobId(e.target.value)
-              setGenerated(null)
-            }}
-            className="flex-1 px-4 py-2.5 rounded-lg border border-slate-200 text-apex-text bg-white focus:outline-none focus:ring-2 focus:ring-apex-blue focus:border-transparent"
-          >
-            <option value="">Choose a job listing…</option>
-            {JOBS.map((j) => (
-              <option key={j.id} value={j.id}>
-                {j.title} — {j.company}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={handleGenerate}
-            disabled={!selectedJobId || loading}
-            className="px-5 py-2.5 rounded-lg font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95 transition-opacity disabled:opacity-50 flex items-center gap-2"
-          >
-            {loading ? (
-              <>
-                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                </svg>
-                Generating…
-              </>
-            ) : (
-              '✦ Generate'
-            )}
-          </button>
-        </div>
+        {selectedJob ? (
+          /* Pre-selected job info */
+          <div>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-apex-blue bg-blue-50 px-2 py-0.5 rounded-full">
+                    ✦ Selected job
+                  </span>
+                </div>
+                <h2 className="text-lg font-semibold text-apex-text">{selectedJob.title}</h2>
+                <p className="text-sm text-apex-muted mt-0.5">
+                  {selectedJob.company}
+                  {selectedJob.location ? ` · ${selectedJob.location}` : ''}
+                  {selectedJob.type ? ` · ${selectedJob.type}` : ''}
+                  {selectedJob.salary ? ` · ${selectedJob.salary}` : ''}
+                </p>
+                {selectedJob.description && (
+                  <p className="text-sm text-apex-muted mt-3 leading-relaxed line-clamp-3">
+                    {selectedJob.description}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={handleClear}
+                className="text-xs text-apex-muted hover:text-apex-text border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors flex-shrink-0"
+              >
+                Change job
+              </button>
+            </div>
 
-        {selectedJob && (
-          <div className="mt-4 p-4 rounded-lg bg-slate-50 border border-slate-100">
-            <p className="text-sm font-medium text-apex-text">
-              {selectedJob.title} · {selectedJob.company}
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={handleGenerate}
+                disabled={loading}
+                className="px-6 py-2.5 rounded-lg font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95 transition-opacity disabled:opacity-60 flex items-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    Generating…
+                  </>
+                ) : (
+                  '✦ Generate tailored documents'
+                )}
+              </button>
+              {selectedJob.url && (
+                <a
+                  href={selectedJob.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2.5 rounded-lg border border-slate-200 text-sm font-medium text-apex-text hover:bg-slate-50 transition-colors"
+                >
+                  View original listing ↗
+                </a>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* No job selected — prompt to go to Discover */
+          <div className="text-center py-8">
+            <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-gradient-to-br from-apex-blue to-apex-cyan flex items-center justify-center">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <h3 className="text-base font-semibold text-apex-text mb-1">No job selected</h3>
+            <p className="text-sm text-apex-muted mb-5">
+              Go to Discover, find a job you like, and click{' '}
+              <span className="font-medium text-apex-blue">✦ Tailor Application</span>.
             </p>
-            <p className="text-xs text-apex-muted mt-0.5">{selectedJob.location} · {selectedJob.type}</p>
-            <p className="text-sm text-apex-muted mt-2 leading-relaxed">{selectedJob.description}</p>
+            <button
+              onClick={() => navigate('/dashboard/discover')}
+              className="px-5 py-2.5 rounded-lg font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95 transition-opacity text-sm"
+            >
+              Browse jobs →
+            </button>
           </div>
         )}
       </div>
 
-      {/* Generated output */}
+      {/* Generated documents */}
       {generated && (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           {/* Tabs */}
@@ -188,25 +262,18 @@ export default function TailoringLab() {
                 Tailored for {selectedJob.title} at {selectedJob.company}
               </p>
               <button
-                onClick={() => navigator.clipboard?.writeText(activeTab === 'cv' ? generated.cv : generated.cover)}
+                onClick={() =>
+                  navigator.clipboard?.writeText(activeTab === 'cv' ? generated.cv : generated.cover)
+                }
                 className="text-xs text-apex-blue hover:underline"
               >
-                Copy
+                Copy to clipboard
               </button>
             </div>
-            <pre className="whitespace-pre-wrap font-mono text-sm text-apex-text leading-relaxed bg-slate-50 rounded-lg p-5 border border-slate-100 overflow-auto max-h-[520px]">
+            <pre className="whitespace-pre-wrap font-mono text-sm text-apex-text leading-relaxed bg-slate-50 rounded-lg p-5 border border-slate-100 overflow-auto max-h-[540px]">
               {activeTab === 'cv' ? generated.cv : generated.cover}
             </pre>
           </div>
-        </div>
-      )}
-
-      {!generated && !loading && (
-        <div className="text-center py-16 text-apex-muted">
-          <svg className="w-10 h-10 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <p className="text-sm">Select a job above and click Generate to see your tailored documents</p>
         </div>
       )}
     </div>

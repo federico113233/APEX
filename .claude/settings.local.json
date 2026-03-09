@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(git push:*)",
+      "Skill(claude-api)",
+      "Bash(npm install:*)",
+      "Bash(\"C:/Users/feder/Desktop/APEX/.env.example\":*)",
+      "Bash(node:*)"
+    ]
+  }
+}

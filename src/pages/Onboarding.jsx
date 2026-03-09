@@ -1,56 +1,340 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Logo from '../components/Logo'
+import CvUploader from '../components/CvUploader'
+import PillGroup from '../components/PillGroup'
 import { useUser } from '../context/UserContext'
 
-const SECTORS = [
-  'Technology',
-  'Finance',
-  'Marketing',
-  'Design',
-  'Consulting',
-  'Research',
-  'Healthcare',
-  'Engineering',
-  'Law',
-  'Other',
+// ── Constants ───────────────────────────────────────────────────────────────
+
+const ALL_SECTORS = [
+  'Technology', 'Finance', 'Marketing', 'Design', 'Consulting',
+  'Research', 'Healthcare', 'Engineering', 'Law', 'Operations',
+  'Sales', 'Product', 'Data & AI', 'Education', 'Other',
 ]
+const CONTRACT_TYPES = ['Full-time', 'Part-time', 'Internship', 'Freelance']
+const WORK_MODES     = ['Remote', 'Hybrid', 'Onsite']
+const CURRENCIES     = ['€', '$', '£', 'CHF']
+const LANG_LEVELS    = ['Native', 'Fluent', 'Advanced', 'Intermediate', 'Basic']
+
+const STEPS = [
+  { n: 1, label: 'Personal info' },
+  { n: 2, label: 'Job preferences' },
+  { n: 3, label: 'Salary & languages' },
+  { n: 4, label: 'Your CV' },
+]
+const TOTAL = STEPS.length
+
+// ── Step indicator ──────────────────────────────────────────────────────────
 
 function StepIndicator({ step }) {
   return (
     <div className="mb-8">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-medium text-apex-muted">Step {step} of 2</span>
-        <span className="text-sm text-apex-muted">
-          {step === 1 ? 'Personal info' : 'Your CV'}
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-sm font-medium text-apex-muted">
+          Step {step} of {TOTAL}
         </span>
+        <span className="text-sm text-apex-muted">{STEPS[step - 1].label}</span>
       </div>
-      <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
-        <div
-          className="h-full bg-gradient-to-r from-apex-blue to-apex-cyan rounded-full transition-all duration-500"
-          style={{ width: step === 1 ? '50%' : '100%' }}
-        />
+      <div className="flex gap-1.5">
+        {STEPS.map(({ n }) => (
+          <div
+            key={n}
+            className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+              n <= step
+                ? 'bg-gradient-to-r from-apex-blue to-apex-cyan'
+                : 'bg-slate-200'
+            }`}
+          />
+        ))}
       </div>
     </div>
   )
 }
 
-function Onboarding() {
-  const [step, setStep] = useState(1)
-  const [form, setForm] = useState({ name: '', sector: '', country: '' })
-  const [cvText, setCvText] = useState('')
-  const { updateProfile } = useUser()
+// ── Field wrapper ───────────────────────────────────────────────────────────
+
+function Field({ label, hint, children }) {
+  return (
+    <div className="space-y-1.5">
+      <label className="block text-sm font-medium text-apex-text">
+        {label}
+        {hint && <span className="ml-1.5 text-xs font-normal text-apex-muted">{hint}</span>}
+      </label>
+      {children}
+    </div>
+  )
+}
+
+// ── Languages editor ────────────────────────────────────────────────────────
+
+function LanguagesEditor({ value, onChange }) {
+  const langs = Array.isArray(value) ? value : []
+  const update = (i, patch) => onChange(langs.map((l, idx) => (idx === i ? { ...l, ...patch } : l)))
+  const remove = (i) => onChange(langs.filter((_, idx) => idx !== i))
+  const add = () => onChange([...langs, { lang: '', level: 'Fluent' }])
+
+  const inputCls =
+    'px-3 py-2 rounded-lg border border-slate-200 text-sm text-apex-text bg-white focus:outline-none focus:ring-2 focus:ring-apex-blue focus:border-transparent'
+
+  return (
+    <div className="space-y-2">
+      {langs.map((entry, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <input
+            value={entry.lang}
+            onChange={(e) => update(i, { lang: e.target.value })}
+            placeholder="Language (e.g. English)"
+            className={`${inputCls} flex-1`}
+          />
+          <select
+            value={entry.level}
+            onChange={(e) => update(i, { level: e.target.value })}
+            className={`${inputCls} w-36`}
+          >
+            {LANG_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
+          </select>
+          <button
+            type="button"
+            onClick={() => remove(i)}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={add}
+        className="flex items-center gap-1.5 text-sm text-apex-blue hover:opacity-80 font-medium"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+        </svg>
+        Add language
+      </button>
+    </div>
+  )
+}
+
+// ── Main component ──────────────────────────────────────────────────────────
+
+export default function Onboarding() {
+  const { user, updateProfile } = useUser()
   const navigate = useNavigate()
 
-  const handleStep1 = (e) => {
-    e.preventDefault()
-    setStep(2)
+  // If already onboarded, skip straight to dashboard
+  useEffect(() => {
+    if (user.onboarded) navigate('/dashboard', { replace: true })
+  }, [user.onboarded, navigate])
+
+  const [step, setStep] = useState(1)
+
+  // All form state in one object so it persists across steps
+  const [form, setForm] = useState({
+    // step 1
+    name: '',
+    country: '',
+    city: '',
+    linkedinUrl: '',
+    // step 2
+    sectors: [],
+    contractType: '',
+    workMode: '',
+    // step 3
+    salaryCurrency: '€',
+    salaryMin: '',
+    salaryMax: '',
+    languages: [],
+    // step 4 (cv)
+    cvText: '',
+  })
+
+  const set = (key, val) => setForm((f) => ({ ...f, [key]: val }))
+
+  const inputCls =
+    'w-full px-4 py-2.5 rounded-lg border border-slate-200 text-apex-text placeholder-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-apex-blue focus:border-transparent'
+
+  const handleFinish = () => {
+    updateProfile({
+      name:           form.name,
+      country:        form.country,
+      city:           form.city,
+      linkedinUrl:    form.linkedinUrl,
+      sectors:        form.sectors,
+      sector:         form.sectors[0] || '',   // legacy field used by Discover
+      contractType:   form.contractType,
+      workMode:       form.workMode,
+      salaryCurrency: form.salaryCurrency,
+      salaryMin:      form.salaryMin,
+      salaryMax:      form.salaryMax,
+      languages:      form.languages,
+      cvText:         form.cvText,
+      onboarded:      true,
+    })
+    navigate('/dashboard')
   }
 
-  const handleStep2 = (e) => {
-    e.preventDefault()
-    updateProfile({ ...form, cvText, onboarded: true })
-    navigate('/dashboard')
+  const canContinue = {
+    1: form.name.trim() && form.country.trim(),
+    2: form.sectors.length > 0 && !!form.contractType && !!form.workMode,
+    3: true,  // salary + languages are optional
+    4: !!form.cvText.trim(),
+  }
+
+  // ── Render steps ──────────────────────────────────────────────────────────
+
+  const steps = {
+    1: (
+      <>
+        <h1 className="text-2xl font-semibold text-apex-text mb-1">Tell us about yourself</h1>
+        <p className="text-apex-muted text-sm mb-7">
+          We'll use this to personalise your job matches and power Alex's advice.
+        </p>
+        <div className="space-y-5">
+          <Field label="Full name">
+            <input
+              required
+              value={form.name}
+              onChange={(e) => set('name', e.target.value)}
+              placeholder="e.g. Sofia Rossi"
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Country">
+            <input
+              required
+              value={form.country}
+              onChange={(e) => set('country', e.target.value)}
+              placeholder="e.g. Italy"
+              className={inputCls}
+            />
+          </Field>
+          <Field label="City" hint="(optional — improves job search)">
+            <input
+              value={form.city}
+              onChange={(e) => set('city', e.target.value)}
+              placeholder="e.g. Milan"
+              className={inputCls}
+            />
+          </Field>
+          <Field label="LinkedIn URL" hint="(optional)">
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+                </svg>
+              </span>
+              <input
+                value={form.linkedinUrl}
+                onChange={(e) => set('linkedinUrl', e.target.value)}
+                placeholder="linkedin.com/in/your-profile"
+                className={`${inputCls} pl-9`}
+              />
+            </div>
+          </Field>
+        </div>
+      </>
+    ),
+
+    2: (
+      <>
+        <h1 className="text-2xl font-semibold text-apex-text mb-1">Your job preferences</h1>
+        <p className="text-apex-muted text-sm mb-7">
+          These filter your job results in Discover and help Alex give targeted advice.
+        </p>
+        <div className="space-y-6">
+          <Field label="Sectors of interest" hint="(select all that apply)">
+            <PillGroup
+              options={ALL_SECTORS}
+              value={form.sectors}
+              onChange={(v) => set('sectors', v)}
+              multi
+            />
+            {form.sectors.length === 0 && (
+              <p className="text-xs text-amber-600 mt-1">Select at least one sector to continue.</p>
+            )}
+          </Field>
+          <Field label="Preferred contract type">
+            <PillGroup
+              options={CONTRACT_TYPES}
+              value={form.contractType}
+              onChange={(v) => set('contractType', v)}
+            />
+          </Field>
+          <Field label="Work mode">
+            <PillGroup
+              options={WORK_MODES}
+              value={form.workMode}
+              onChange={(v) => set('workMode', v)}
+            />
+          </Field>
+        </div>
+      </>
+    ),
+
+    3: (
+      <>
+        <h1 className="text-2xl font-semibold text-apex-text mb-1">Salary & languages</h1>
+        <p className="text-apex-muted text-sm mb-7">
+          Optional — Alex and Discover use these to calibrate recommendations.
+        </p>
+        <div className="space-y-6">
+          <Field label="Salary range" hint="(annual gross, optional)">
+            <div className="flex items-center gap-2">
+              <select
+                value={form.salaryCurrency}
+                onChange={(e) => set('salaryCurrency', e.target.value)}
+                className="px-3 py-2.5 rounded-lg border border-slate-200 text-apex-text bg-white focus:outline-none focus:ring-2 focus:ring-apex-blue"
+              >
+                {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <input
+                type="number"
+                min="0"
+                value={form.salaryMin}
+                onChange={(e) => set('salaryMin', e.target.value)}
+                placeholder="Min"
+                className="w-28 px-3 py-2.5 rounded-lg border border-slate-200 text-apex-text placeholder-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-apex-blue"
+              />
+              <span className="text-apex-muted">–</span>
+              <input
+                type="number"
+                min="0"
+                value={form.salaryMax}
+                onChange={(e) => set('salaryMax', e.target.value)}
+                placeholder="Max"
+                className="w-28 px-3 py-2.5 rounded-lg border border-slate-200 text-apex-text placeholder-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-apex-blue"
+              />
+            </div>
+            {form.salaryMin && form.salaryMax && (
+              <p className="text-xs text-apex-muted mt-1">
+                {form.salaryCurrency}{parseInt(form.salaryMin).toLocaleString()} – {form.salaryCurrency}{parseInt(form.salaryMax).toLocaleString()} / year
+              </p>
+            )}
+          </Field>
+
+          <Field label="Languages spoken">
+            <LanguagesEditor
+              value={form.languages}
+              onChange={(v) => set('languages', v)}
+            />
+          </Field>
+        </div>
+      </>
+    ),
+
+    4: (
+      <>
+        <h1 className="text-2xl font-semibold text-apex-text mb-1">Add your CV</h1>
+        <p className="text-apex-muted text-sm mb-6">
+          Upload a PDF or Word file, or paste the text. Alex and the Tailoring Lab will use it to personalise everything.
+        </p>
+        <CvUploader value={form.cvText} onChange={(v) => set('cvText', v)} compact />
+      </>
+    ),
   }
 
   return (
@@ -61,115 +345,61 @@ function Onboarding() {
         </Link>
       </header>
 
-      <main className="flex-1 flex items-center justify-center px-6 py-12">
+      <main className="flex-1 flex items-center justify-center px-6 py-10">
         <div className="w-full max-w-lg">
           <StepIndicator step={step} />
 
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8">
-            {step === 1 ? (
-              <>
-                <h1 className="text-2xl font-semibold text-apex-text mb-1">
-                  Tell us about yourself
-                </h1>
-                <p className="text-apex-muted text-sm mb-8">
-                  We'll use this to personalize your job matches and recommendations.
-                </p>
+            {steps[step]}
 
-                <form onSubmit={handleStep1} className="space-y-5">
-                  <div>
-                    <label className="block text-sm font-medium text-apex-text mb-2">
-                      Full name
-                    </label>
-                    <input
-                      required
-                      value={form.name}
-                      onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                      placeholder="e.g. Sofia Rossi"
-                      className="w-full px-4 py-2.5 rounded-lg border border-slate-200 text-apex-text placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-apex-blue focus:border-transparent"
-                    />
-                  </div>
+            {/* Navigation */}
+            <div className="flex gap-3 mt-8">
+              {step > 1 && (
+                <button
+                  type="button"
+                  onClick={() => setStep((s) => s - 1)}
+                  className="px-5 py-3 rounded-lg border border-slate-200 font-medium text-apex-text hover:bg-slate-50 transition-colors"
+                >
+                  ← Back
+                </button>
+              )}
 
-                  <div>
-                    <label className="block text-sm font-medium text-apex-text mb-2">
-                      Target sector
-                    </label>
-                    <select
-                      required
-                      value={form.sector}
-                      onChange={(e) => setForm((f) => ({ ...f, sector: e.target.value }))}
-                      className="w-full px-4 py-2.5 rounded-lg border border-slate-200 text-apex-text bg-white focus:outline-none focus:ring-2 focus:ring-apex-blue focus:border-transparent"
-                    >
-                      <option value="">Select a sector…</option>
-                      {SECTORS.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+              {step < TOTAL ? (
+                <button
+                  type="button"
+                  disabled={!canContinue[step]}
+                  onClick={() => setStep((s) => s + 1)}
+                  className="flex-1 py-3 rounded-lg font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95 transition-opacity disabled:opacity-40"
+                >
+                  Continue →
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={!canContinue[4]}
+                  onClick={handleFinish}
+                  className="flex-1 py-3 rounded-lg font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95 transition-opacity disabled:opacity-40"
+                >
+                  Enter APEX →
+                </button>
+              )}
+            </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-apex-text mb-2">
-                      Country
-                    </label>
-                    <input
-                      required
-                      value={form.country}
-                      onChange={(e) => setForm((f) => ({ ...f, country: e.target.value }))}
-                      placeholder="e.g. Italy"
-                      className="w-full px-4 py-2.5 rounded-lg border border-slate-200 text-apex-text placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-apex-blue focus:border-transparent"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full py-3 rounded-lg font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95 transition-opacity"
-                  >
-                    Continue →
-                  </button>
-                </form>
-              </>
-            ) : (
-              <>
-                <h1 className="text-2xl font-semibold text-apex-text mb-1">
-                  Paste your CV
-                </h1>
-                <p className="text-apex-muted text-sm mb-8">
-                  We'll analyze it to calculate match scores and generate tailored documents.
-                </p>
-
-                <form onSubmit={handleStep2} className="space-y-5">
-                  <div>
-                    <label className="block text-sm font-medium text-apex-text mb-2">
-                      CV text
-                    </label>
-                    <textarea
-                      required
-                      value={cvText}
-                      onChange={(e) => setCvText(e.target.value)}
-                      placeholder="Paste the full text of your CV here…&#10;&#10;Include education, work experience, skills, and any projects or extracurriculars."
-                      rows={13}
-                      className="w-full px-4 py-3 rounded-lg border border-slate-200 text-apex-text placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-apex-blue focus:border-transparent resize-none font-mono text-sm"
-                    />
-                  </div>
-
-                  <div className="flex gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setStep(1)}
-                      className="px-5 py-3 rounded-lg border border-slate-200 font-medium text-apex-text hover:bg-slate-50 transition-colors"
-                    >
-                      ← Back
-                    </button>
-                    <button
-                      type="submit"
-                      className="flex-1 py-3 rounded-lg font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95 transition-opacity"
-                    >
-                      Let's go →
-                    </button>
-                  </div>
-                </form>
-              </>
+            {/* Skip CV on last step */}
+            {step === TOTAL && !form.cvText && (
+              <p className="text-center mt-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    // allow skip but mark onboarded with empty CV
+                    set('cvText', ' ')
+                    setTimeout(handleFinish, 0)
+                  }}
+                  className="text-sm text-apex-muted hover:text-apex-text underline underline-offset-2"
+                >
+                  Skip for now — I'll add it later in Profile
+                </button>
+              </p>
             )}
           </div>
         </div>
@@ -177,5 +407,3 @@ function Onboarding() {
     </div>
   )
 }
-
-export default Onboarding

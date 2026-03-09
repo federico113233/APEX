@@ -1,91 +1,137 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
+import Anthropic from '@anthropic-ai/sdk'
 import { useUser } from '../context/UserContext'
 
-const INITIAL_MESSAGE = {
-  id: 1,
-  from: 'alex',
-  text: "Hi! I'm Alex, your APEX career advisor 👋 I can help with your CV, application strategy, interview prep, and more. What's on your mind?",
+const MODEL = 'claude-sonnet-4-20250514'
+
+function getClient() {
+  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
+  console.log('[AlexChat] VITE_ANTHROPIC_API_KEY present:', !!apiKey, '| length:', apiKey?.length ?? 0)
+  if (!apiKey) {
+    throw new Error('VITE_ANTHROPIC_API_KEY is not set. Add it to .env.local and restart the dev server.')
+  }
+  return new Anthropic({ apiKey, dangerouslyAllowBrowser: true })
 }
 
-const AUTO_REPLIES = [
-  {
-    keywords: ['cv', 'resume', 'curriculum vitae'],
-    reply:
-      "A strong CV should highlight quantified achievements — e.g. 'Led a team of 4 to deliver X, increasing efficiency by 30%' beats a generic responsibility list. Make sure every bullet starts with a strong action verb. Want tips on a specific section?",
-  },
-  {
-    keywords: ['cover letter', 'covering letter'],
-    reply:
-      "Great cover letters are 3 paragraphs max: (1) why this company, (2) why you're the right fit, (3) a confident close. Mirror keywords from the job description — it helps with ATS filters and shows genuine interest.",
-  },
-  {
-    keywords: ['interview', 'interviews'],
-    reply:
-      "Prep 3–5 strong stories using the STAR method (Situation, Task, Action, Result). Research the company's recent news, their values, and the team. Practice out loud — it makes a bigger difference than most people expect.",
-  },
-  {
-    keywords: ['match', 'score', 'percentage', '%'],
-    reply:
-      "Match scores are calculated by comparing your CV keywords and target sector to each job's requirements. To boost your score, make sure your CV clearly reflects the skills and terminology used in your target sector.",
-  },
-  {
-    keywords: ['tailoring', 'tailor', 'customize', 'personaliz'],
-    reply:
-      "Head to the Tailoring Lab — select a job from the list and click Generate. APEX will produce a CV and cover letter optimized for that specific role. Even small tweaks per application significantly improve your chances.",
-  },
-  {
-    keywords: ['tracker', 'track', 'application', 'applied'],
-    reply:
-      "The Tracker shows all your applications and their status. When you click Apply in Discover, it's added automatically. Update statuses as you move through each process — it keeps you organized and lets you spot patterns.",
-  },
-  {
-    keywords: ['linkedin', 'network', 'networking', 'connect'],
-    reply:
-      "Always connect with the recruiter or hiring manager on LinkedIn after applying. A brief, genuine note — 'I just applied for X and wanted to connect — I'm really excited about the team's work on Y' — can get your name remembered.",
-  },
-  {
-    keywords: ['internship', 'intern', 'internships'],
-    reply:
-      "For internships, companies expect less experience. What stands out is genuine curiosity, a clear motivation for that specific company, and 1–2 relevant projects or experiences. Show enthusiasm and coachability.",
-  },
-  {
-    keywords: ['rejection', 'rejected', 'ghosted', 'no response'],
-    reply:
-      "Rejections are part of every job search — even the most successful candidates face them. The key is volume + quality: broad search in Discover, tailored applications per role. A follow-up email after rejection is also perfectly fine and sometimes opens doors.",
-  },
-  {
-    keywords: ['salary', 'pay', 'compensation', 'negotiate'],
-    reply:
-      "For internships, salaries are often fixed — but for full-time roles, always negotiate. Research market rates (Glassdoor, Levels.fyi), anchor high, and justify with specific value you bring. Most companies expect negotiation.",
-  },
-]
+function buildSystemPrompt(user, applications) {
+  let prompt =
+    "You are Alex, an expert university career advisor with 15 years of experience helping students find jobs. " +
+    "You know the student's full profile, preferences, CV, and job applications. Be warm, direct, and give concrete actionable advice. " +
+    "Never be generic. Always refer to the student's specific situation when possible. " +
+    "Keep responses concise — 2-4 sentences unless more detail is clearly needed."
 
-const FALLBACKS = [
-  "That's a great question! To give you the best advice, could you share which role or company you're targeting?",
-  "I'd love to help. Can you tell me more — are you at the application stage, preparing for interviews, or something else?",
-  "Good thinking to ask! One universal tip: always tailor your application to the specific job description. Generic applications rarely land interviews.",
-  "I'm here to help you navigate every step. Could you give me a bit more context so I can point you in the right direction?",
-]
+  if (user.name)    prompt += `\n\nStudent: ${user.name}`
+  if (user.country) prompt += `\nCountry: ${user.country}`
 
-let fallbackIndex = 0
+  const sectors = user.sectors?.length ? user.sectors : user.sector ? [user.sector] : []
+  if (sectors.length) prompt += `\nSectors of interest: ${sectors.join(', ')}`
 
-function getReply(input) {
-  const lower = input.toLowerCase()
-  const match = AUTO_REPLIES.find((r) => r.keywords.some((k) => lower.includes(k)))
-  if (match) return match.reply
-  const reply = FALLBACKS[fallbackIndex % FALLBACKS.length]
-  fallbackIndex++
-  return reply
+  if (user.contractType) prompt += `\nPreferred contract: ${user.contractType}`
+  if (user.workMode)     prompt += `\nWork mode preference: ${user.workMode}`
+
+  if (user.salaryMin || user.salaryMax) {
+    const cur = user.salaryCurrency || '€'
+    const range = [user.salaryMin && `${cur}${user.salaryMin}`, user.salaryMax && `${cur}${user.salaryMax}`]
+      .filter(Boolean).join(' – ')
+    prompt += `\nSalary expectation: ${range} (annual gross)`
+  }
+
+  if (user.languages?.length) {
+    const langs = user.languages.filter((l) => l.lang).map((l) => `${l.lang} (${l.level})`).join(', ')
+    if (langs) prompt += `\nLanguages: ${langs}`
+  }
+
+  if (user.linkedinUrl) prompt += `\nLinkedIn: ${user.linkedinUrl}`
+
+  if (user.cvText) prompt += `\n\nStudent's CV:\n${user.cvText}`
+
+  if (applications.length > 0) {
+    prompt += '\n\nCurrent applications:\n'
+    applications.forEach((app) => {
+      prompt += `• ${app.title} @ ${app.company} (${app.status})\n`
+    })
+  }
+
+  prompt +=
+    '\n\nWhen the student mentions a rejection, interview invite, or offer, acknowledge it warmly and confirm the tracker has been updated.'
+
+  return prompt
+}
+
+// Detect tracker-relevant phrases in student messages
+function detectTrackerUpdate(text, applications) {
+  const lower = text.toLowerCase()
+  for (const app of applications) {
+    const company = app.company.toLowerCase()
+    if (!lower.includes(company)) continue
+
+    if (
+      lower.includes('reject') ||
+      lower.includes('rifiut') ||
+      lower.includes('not selected') ||
+      lower.includes('scartato') ||
+      lower.includes('no offer') ||
+      lower.includes('unsuccessful')
+    ) {
+      return { appId: app.id, status: 'Rejected', company: app.company }
+    }
+    if (
+      lower.includes('interview') ||
+      lower.includes('colloquio') ||
+      lower.includes('chiamata') ||
+      lower.includes('assessment') ||
+      lower.includes('chiamano')
+    ) {
+      return { appId: app.id, status: 'Interview', company: app.company }
+    }
+    if (
+      lower.includes('offer') ||
+      lower.includes('offerta') ||
+      lower.includes('got the job') ||
+      lower.includes('hired') ||
+      lower.includes('assunto')
+    ) {
+      return { appId: app.id, status: 'Offer', company: app.company }
+    }
+  }
+  return null
+}
+
+const STATUS_COLORS = {
+  Rejected: 'bg-red-50 text-red-600 border-red-200',
+  Interview: 'bg-blue-50 text-apex-blue border-blue-200',
+  Offer: 'bg-green-50 text-green-700 border-green-200',
 }
 
 export default function AlexChat() {
-  const { user } = useUser()
+  const { user, applications, updateStatus } = useUser()
   const [open, setOpen] = useState(false)
-  const [messages, setMessages] = useState([INITIAL_MESSAGE])
+
+  const greeting = useMemo(
+    () =>
+      user.name
+        ? `Hey ${user.name}! I'm Alex, your APEX career advisor. I know your profile and applications — ask me anything about CVs, interviews, or your search strategy.`
+        : "Hey! I'm Alex, your APEX career advisor. Ask me anything about CVs, applications, interviews, or your job search strategy.",
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [] // computed once on mount — greeting doesn't change mid-session
+  )
+
+  const [messages, setMessages] = useState([{ id: 'init', from: 'alex', text: greeting }])
+  // Conversation history for Claude API (excludes initial greeting)
+  const historyRef = useRef([])
+  const [streaming, setStreaming] = useState(false)
   const [input, setInput] = useState('')
-  const [typing, setTyping] = useState(false)
+  const [trackerToast, setTrackerToast] = useState(null)
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
+  const abortRef = useRef(null)
+
+  // Abort any in-flight stream when component unmounts
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort?.()
+    }
+  }, [])
 
   useEffect(() => {
     if (open) {
@@ -94,20 +140,89 @@ export default function AlexChat() {
     }
   }, [open, messages])
 
-  const send = () => {
+  useEffect(() => {
+    if (trackerToast) {
+      const t = setTimeout(() => setTrackerToast(null), 4000)
+      return () => clearTimeout(t)
+    }
+  }, [trackerToast])
+
+  const send = async () => {
     const text = input.trim()
-    if (!text) return
+    if (!text || streaming) return
+
+    // Check for tracker update before sending
+    const trackerUpdate = detectTrackerUpdate(text, applications)
+    if (trackerUpdate) {
+      updateStatus(trackerUpdate.appId, trackerUpdate.status)
+      setTrackerToast(trackerUpdate)
+    }
 
     const userMsg = { id: Date.now(), from: 'user', text }
     setMessages((prev) => [...prev, userMsg])
     setInput('')
-    setTyping(true)
 
-    setTimeout(() => {
-      const reply = getReply(text)
-      setMessages((prev) => [...prev, { id: Date.now() + 1, from: 'alex', text: reply }])
-      setTyping(false)
-    }, 900)
+    // Add to history
+    historyRef.current = [...historyRef.current, { role: 'user', content: text }]
+
+    // Placeholder streaming message
+    const alexId = Date.now() + 1
+    setMessages((prev) => [...prev, { id: alexId, from: 'alex', text: '', pending: true }])
+    setStreaming(true)
+
+    let fullText = ''
+    try {
+      const client = getClient()
+      const stream = client.messages.stream({
+        model: MODEL,
+        max_tokens: 1024,
+        system: buildSystemPrompt(user, applications),
+        messages: historyRef.current,
+      })
+
+      abortRef.current = stream
+
+      for await (const event of stream) {
+        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+          fullText += event.delta.text
+          setMessages((prev) =>
+            prev.map((m) => (m.id === alexId ? { ...m, text: fullText, pending: false } : m))
+          )
+          bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+        }
+      }
+
+      // Save assistant turn to history
+      if (fullText) {
+        historyRef.current = [
+          ...historyRef.current,
+          { role: 'assistant', content: fullText },
+        ]
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        console.error('[AlexChat] API error:', err)
+        console.error('[AlexChat] Error name:', err?.name)
+        console.error('[AlexChat] Error status:', err?.status)
+        console.error('[AlexChat] Error message:', err?.message)
+
+        let errorText = `Something went wrong (${err?.status ?? err?.name ?? 'unknown'}). Check the browser console for details.`
+        if (err instanceof Anthropic.AuthenticationError || err?.status === 401) {
+          errorText = 'API key missing or invalid — check VITE_ANTHROPIC_API_KEY in .env.local and restart the dev server.'
+        } else if (err?.message?.includes('VITE_ANTHROPIC_API_KEY')) {
+          errorText = err.message
+        }
+
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === alexId ? { ...m, text: errorText, pending: false, error: true } : m
+          )
+        )
+      }
+    } finally {
+      setStreaming(false)
+      abortRef.current = null
+    }
   }
 
   const handleKey = (e) => {
@@ -119,106 +234,150 @@ export default function AlexChat() {
 
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
+      {/* Tracker update toast */}
+      {trackerToast && (
+        <div
+          className={`px-3.5 py-2.5 rounded-xl border text-xs font-medium shadow-lg flex items-center gap-2 transition-all ${STATUS_COLORS[trackerToast.status]}`}
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          Tracker updated — {trackerToast.company}: {trackerToast.status}
+        </div>
+      )}
+
       {/* Chat panel */}
       {open && (
-        <div className="w-80 bg-white rounded-2xl border border-slate-200 shadow-xl flex flex-col overflow-hidden"
-          style={{ height: '440px' }}>
+        <div
+          className="w-[340px] bg-white rounded-2xl border border-slate-200 shadow-2xl shadow-slate-200/80 flex flex-col overflow-hidden"
+          style={{ height: '480px' }}
+        >
           {/* Header */}
-          <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-apex-blue to-apex-cyan">
-            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-              <span className="text-white font-bold text-sm">A</span>
+          <div className="flex items-center gap-3 px-4 py-3.5 bg-white border-b border-slate-100">
+            <div className="relative">
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-apex-blue to-apex-cyan flex items-center justify-center flex-shrink-0 shadow-sm">
+                <span className="text-white font-bold text-sm">A</span>
+              </div>
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-white" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-white font-semibold text-sm leading-none">Alex</p>
-              <p className="text-white/70 text-xs mt-0.5">Career Advisor · APEX</p>
+              <p className="font-semibold text-apex-text text-sm leading-tight">Alex</p>
+              <p className="text-xs text-apex-muted leading-tight">Career Advisor · APEX</p>
             </div>
             <button
               onClick={() => setOpen(false)}
-              className="text-white/70 hover:text-white transition-colors"
-              aria-label="Close chat"
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-apex-muted hover:bg-slate-100 hover:text-apex-text transition-colors"
+              aria-label="Close"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scroll-smooth">
             {messages.map((msg) => (
               <div
                 key={msg.id}
-                className={`flex gap-2 ${msg.from === 'user' ? 'justify-end' : 'justify-start'}`}
+                className={`flex gap-2.5 ${msg.from === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 {msg.from === 'alex' && (
-                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-apex-blue to-apex-cyan flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <span className="text-white font-bold text-xs">A</span>
+                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-apex-blue to-apex-cyan flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm">
+                    <span className="text-white font-bold text-[10px]">A</span>
                   </div>
                 )}
                 <div
-                  className={`max-w-[85%] px-3 py-2 rounded-2xl text-sm leading-relaxed ${
+                  className={`max-w-[82%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
                     msg.from === 'user'
-                      ? 'bg-gradient-to-r from-apex-blue to-apex-cyan text-white rounded-br-sm'
-                      : 'bg-slate-100 text-apex-text rounded-bl-sm'
+                      ? 'bg-gradient-to-r from-apex-blue to-apex-cyan text-white rounded-tr-sm'
+                      : msg.error
+                      ? 'bg-red-50 text-red-600 rounded-tl-sm border border-red-100'
+                      : 'bg-slate-100 text-apex-text rounded-tl-sm'
                   }`}
                 >
-                  {msg.text}
+                  {msg.pending && !msg.text ? (
+                    <span className="flex gap-1 items-center h-4">
+                      <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </span>
+                  ) : (
+                    <span style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</span>
+                  )}
                 </div>
               </div>
             ))}
-
-            {typing && (
-              <div className="flex gap-2 justify-start">
-                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-apex-blue to-apex-cyan flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <span className="text-white font-bold text-xs">A</span>
-                </div>
-                <div className="bg-slate-100 rounded-2xl rounded-bl-sm px-3 py-2 flex gap-1 items-center">
-                  <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                </div>
-              </div>
-            )}
-
             <div ref={bottomRef} />
           </div>
 
+          {/* Suggested prompts — only shown when no conversation yet */}
+          {messages.length === 1 && (
+            <div className="px-4 pb-3 flex flex-wrap gap-1.5">
+              {['Review my CV', 'Interview tips', 'Cover letter help'].map((prompt) => (
+                <button
+                  key={prompt}
+                  onClick={() => {
+                    setInput(prompt)
+                    setTimeout(() => inputRef.current?.focus(), 50)
+                  }}
+                  className="px-2.5 py-1 rounded-full text-xs border border-slate-200 text-apex-muted hover:border-apex-blue hover:text-apex-blue transition-colors bg-white"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Input */}
-          <div className="px-3 py-3 border-t border-slate-100 flex gap-2">
-            <input
+          <div className="px-3 py-3 border-t border-slate-100 flex gap-2 items-end">
+            <textarea
               ref={inputRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setInput(e.target.value)
+                e.target.style.height = 'auto'
+                e.target.style.height = Math.min(e.target.scrollHeight, 80) + 'px'
+              }}
               onKeyDown={handleKey}
               placeholder="Ask Alex anything…"
-              className="flex-1 px-3 py-2 text-sm rounded-lg border border-slate-200 text-apex-text placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-apex-blue focus:border-transparent"
+              rows={1}
+              className="flex-1 px-3 py-2 text-sm rounded-xl border border-slate-200 text-apex-text placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-apex-blue/30 focus:border-apex-blue resize-none leading-relaxed overflow-hidden"
+              style={{ minHeight: '36px', maxHeight: '80px' }}
             />
             <button
               onClick={send}
-              disabled={!input.trim() || typing}
-              className="w-8 h-8 rounded-lg bg-gradient-to-r from-apex-blue to-apex-cyan text-white flex items-center justify-center hover:opacity-90 transition-opacity disabled:opacity-40"
+              disabled={!input.trim() || streaming}
+              className="w-9 h-9 rounded-xl bg-gradient-to-r from-apex-blue to-apex-cyan text-white flex items-center justify-center hover:opacity-90 transition-opacity disabled:opacity-35 flex-shrink-0"
               aria-label="Send"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
+              {streaming ? (
+                <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+              )}
             </button>
           </div>
         </div>
       )}
 
-      {/* Bubble toggle */}
+      {/* Floating bubble */}
       <button
         onClick={() => setOpen((o) => !o)}
-        className="w-14 h-14 rounded-full bg-gradient-to-br from-apex-blue to-apex-cyan shadow-lg shadow-blue-500/30 flex items-center justify-center hover:scale-105 transition-transform"
-        aria-label="Open Alex chat"
+        className="w-14 h-14 rounded-full bg-gradient-to-br from-apex-blue to-apex-cyan shadow-lg shadow-blue-500/25 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
+        aria-label="Chat with Alex"
       >
         {open ? (
-          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
           </svg>
         ) : (
-          <span className="text-white font-bold text-xl">A</span>
+          <span className="text-white font-bold text-xl tracking-tight">A</span>
         )}
       </button>
     </div>

@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard'
 import Discover from './pages/Discover'
 import TailoringLab from './pages/TailoringLab'
 import Tracker from './pages/Tracker'
+import Profile from './pages/Profile'
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
           <Route path="discover" element={<Discover />} />
           <Route path="tailoring-lab" element={<TailoringLab />} />
           <Route path="tracker" element={<Tracker />} />
+          <Route path="profile" element={<Profile />} />
         </Route>
       </Routes>
     </BrowserRouter>

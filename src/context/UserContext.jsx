@@ -28,8 +28,18 @@ export function UserProvider({ children }) {
     name: '',
     sector: '',
     country: '',
+    city: '',
     cvText: '',
     onboarded: false,
+    // extended profile fields
+    contractType: '',          // 'Full-time' | 'Part-time' | 'Internship' | 'Freelance'
+    workMode: '',              // 'Remote' | 'Hybrid' | 'Onsite'
+    salaryMin: '',
+    salaryMax: '',
+    salaryCurrency: '€',
+    sectors: [],               // string[]
+    languages: [],             // { lang: string, level: string }[]
+    linkedinUrl: '',
   })
   const [applications, setApplications] = useState(SEED_APPLICATIONS)
 

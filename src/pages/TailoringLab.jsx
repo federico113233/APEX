@@ -20,14 +20,25 @@ function extractSkills(description = '', max = 6) {
 
 // ─── Document generators ──────────────────────────────────────────────────
 function generateCV(user, job) {
-  const name = user.name || 'Your Name'
-  const country = user.country || 'your country'
-  const sector = user.sector || 'professional'
-  const skills = job.keywords?.slice(0, 6) ?? extractSkills(job.description)
-  const slug = name.toLowerCase().replace(/\s+/g, '-')
+  const name     = user.name    || 'Your Name'
+  const country  = user.country || 'your country'
+  const sectors  = user.sectors?.length ? user.sectors : user.sector ? [user.sector] : ['professional']
+  const sector   = sectors[0]
+  const skills   = job.keywords?.slice(0, 6) ?? extractSkills(job.description)
+
+  const linkedin = user.linkedinUrl
+    ? user.linkedinUrl.replace(/^https?:\/\//, '')
+    : `linkedin.com/in/${name.toLowerCase().replace(/\s+/g, '-')}`
+
+  const langLine = user.languages?.filter((l) => l.lang).length
+    ? user.languages.filter((l) => l.lang).map((l) => `${l.lang} (${l.level})`).join('  ·  ')
+    : `English (Fluent)${country === 'Italy' ? '  ·  Italian (Native)' : ''}`
+
+  const contractNote = user.contractType ? ` · Open to ${user.contractType}` : ''
+  const modeNote     = user.workMode     ? ` · ${user.workMode}`              : ''
 
   return `${name.toUpperCase()}
-${country}  ·  linkedin.com/in/${slug}  ·  your@email.com
+${country}  ·  ${linkedin}  ·  your@email.com${contractNote}${modeNote}
 
 ──────────────────────────────────────────────────
 
@@ -61,7 +72,7 @@ Oct 2023 – May 2024
 
 SKILLS
 Technical:  ${skills.join('  ·  ')}
-Languages:  English (fluent)${country === 'Italy' ? '  ·  Italian (native)' : ''}
+Languages:  ${langLine}
 Tools:      Microsoft Office  ·  Google Workspace  ·  Notion  ·  Slack
 
 ──────────────────────────────────────────────────
@@ -69,19 +80,31 @@ Tools:      Microsoft Office  ·  Google Workspace  ·  Notion  ·  Slack
 ACHIEVEMENTS & ACTIVITIES
 • ${job.company} Virtual Experience Programme — Top 10% of global participants (2024)
 • Hackathon Winner — [Event Name], ${country}, 2024
-• ${sector} Society, Committee Member — Organised 3 events, 100+ attendees`
+• ${sectors.slice(0, 2).join(' & ')} Society, Committee Member — Organised 3 events, 100+ attendees`
 }
 
 function generateCoverLetter(user, job) {
-  const name = user.name || 'Your Name'
-  const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
-  const skills = job.keywords?.slice(0, 3) ?? extractSkills(job.description, 3)
+  const name    = user.name    || 'Your Name'
+  const country = user.country || 'your country'
+  const today   = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+  const skills  = job.keywords?.slice(0, 3) ?? extractSkills(job.description, 3)
+  const sectors = user.sectors?.length ? user.sectors : user.sector ? [user.sector] : []
+  const sectorLabel = sectors[0] || job.title.split(' ')[0]
+
   const descriptionSnippet = job.description
     ? job.description.split('.')[0].toLowerCase()
     : `${job.title} excellence`
 
+  const linkedin = user.linkedinUrl
+    ? `\nLinkedIn: ${user.linkedinUrl.replace(/^https?:\/\//, '')}`
+    : ''
+
+  const modeNote = user.workMode
+    ? ` I am specifically interested in ${user.workMode.toLowerCase()} opportunities and ${job.location ? `${job.location} fits well` : 'your setup aligns with my preferences'}.`
+    : ''
+
   return `${name}
-${user.country || 'your country'}  ·  your@email.com
+${country}  ·  your@email.com${linkedin}
 
 ${today}
 
@@ -93,9 +116,9 @@ ${job.company}${job.location ? ` — ${job.location}` : ''}
 
 Dear Hiring Manager,
 
-I am writing to express my strong interest in the ${job.title} position at ${job.company}. Having closely followed ${job.company}'s work — in particular its focus on ${descriptionSnippet} — I am genuinely excited about the opportunity to contribute my skills in ${skills.join(', ')} to your team.
+I am writing to express my strong interest in the ${job.title} position at ${job.company}. Having closely followed ${job.company}'s work — in particular its focus on ${descriptionSnippet} — I am genuinely excited about the opportunity to contribute my skills in ${skills.join(', ')} to your team.${modeNote}
 
-During my internship at [Previous Company], I gained hands-on experience with ${skills[0]} and ${skills[1] || 'related tools'}, delivering a project that improved team efficiency by 25%. I am someone who takes ownership from day one, works well in cross-functional teams, and is not afraid to ask the right questions. These qualities, combined with my deep interest in ${user.sector || job.title.split(' ')[0]}, make me confident I can add real value at ${job.company} from the very start.
+During my internship at [Previous Company], I gained hands-on experience with ${skills[0]} and ${skills[1] || 'related tools'}, delivering a project that improved team efficiency by 25%. I am someone who takes ownership from day one, works well in cross-functional teams, and is not afraid to ask the right questions. These qualities, combined with my deep interest in ${sectorLabel}, make me confident I can add real value at ${job.company} from the very start.
 
 I would welcome the chance to discuss how my background and drive align with what your team is building. I am available for an interview at your convenience and look forward to hearing from you.
 

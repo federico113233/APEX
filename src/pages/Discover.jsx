@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../context/UserContext'
 
@@ -8,7 +8,6 @@ const APP_KEY = '9bbfecc7ea360d1bedae18879b3748bc'
 
 // ─── Country name → Adzuna country code ────────────────────────────────────
 const COUNTRY_TO_CODE = {
-  // English names
   'United Kingdom': 'gb', 'UK': 'gb', 'England': 'gb', 'Britain': 'gb',
   'United States': 'us', 'USA': 'us', 'US': 'us', 'America': 'us',
   'Australia': 'au', 'Austria': 'at', 'Brazil': 'br', 'Canada': 'ca',
@@ -18,26 +17,23 @@ const COUNTRY_TO_CODE = {
   'Spain': 'es', 'Switzerland': 'ch', 'Belgium': 'be', 'Sweden': 'se',
   'Norway': 'no', 'Denmark': 'dk', 'Finland': 'fi', 'Portugal': 'pt',
   'Argentina': 'ar', 'Chile': 'cl', 'Colombia': 'co', 'Peru': 'pe',
-  // Native names
-  'Italia': 'it', 'Deutschland': 'de', 'España': 'es', 'France': 'fr',
+  'Italia': 'it', 'Deutschland': 'de', 'España': 'es',
   'Nederland': 'nl', 'Polska': 'pl', 'Sverige': 'se', 'Norge': 'no',
 }
 
-// Code → country display name (for banner)
-const CODE_TO_NAME = Object.fromEntries(
-  [
-    ['gb','United Kingdom'],['us','United States'],['au','Australia'],
-    ['at','Austria'],['br','Brazil'],['ca','Canada'],['de','Germany'],
-    ['fr','France'],['in','India'],['it','Italy'],['mx','Mexico'],
-    ['nl','Netherlands'],['nz','New Zealand'],['pl','Poland'],['ru','Russia'],
-    ['sg','Singapore'],['za','South Africa'],['es','Spain'],['ch','Switzerland'],
-    ['be','Belgium'],['se','Sweden'],['no','Norway'],['dk','Denmark'],
-    ['fi','Finland'],['pt','Portugal'],['ar','Argentina'],['cl','Chile'],
-    ['co','Colombia'],['pe','Peru'],
-  ]
-)
+const CODE_TO_NAME = Object.fromEntries([
+  ['gb','United Kingdom'],['us','United States'],['au','Australia'],
+  ['at','Austria'],['br','Brazil'],['ca','Canada'],['de','Germany'],
+  ['fr','France'],['in','India'],['it','Italy'],['mx','Mexico'],
+  ['nl','Netherlands'],['nz','New Zealand'],['pl','Poland'],['ru','Russia'],
+  ['sg','Singapore'],['za','South Africa'],['es','Spain'],['ch','Switzerland'],
+  ['be','Belgium'],['se','Sweden'],['no','Norway'],['dk','Denmark'],
+  ['fi','Finland'],['pt','Portugal'],['ar','Argentina'],['cl','Chile'],
+  ['co','Colombia'],['pe','Peru'],
+])
 
-const SUPPORTED_COUNTRIES = Object.entries(CODE_TO_NAME).map(([code, label]) => ({ code, label }))
+const SUPPORTED_COUNTRIES = Object.entries(CODE_TO_NAME)
+  .map(([code, label]) => ({ code, label }))
   .sort((a, b) => a.label.localeCompare(b.label))
 
 const CURRENCY = {
@@ -47,7 +43,6 @@ const CURRENCY = {
   ch:'CHF', se:'kr', no:'kr', dk:'kr', ar:'$', cl:'$', co:'$', pe:'S/',
 }
 
-// ─── Sector → Adzuna `what` keyword ────────────────────────────────────────
 const SECTOR_KEYWORD = {
   Technology:  'software developer',
   Finance:     'finance analyst',
@@ -66,23 +61,15 @@ const SECTOR_KEYWORD = {
   Other:       'graduate',
 }
 
-// ─── Contract type mapping ──────────────────────────────────────────────────
-// Adzuna contract_type values: permanent | contract | part_time | full_time
-// Internship: pass 'internship' as the user requested, plus add "intern" to `what`
-const CONTRACT_TO_ADZUNA = {
-  'Full-time':  'full_time',
-  'Part-time':  'part_time',
-  'Freelance':  'contract',
-  'Internship': 'internship',
+const CONTRACT_LABEL = {
+  permanent:  'Permanent',
+  contract:   'Contract',
+  part_time:  'Part Time',
+  full_time:  'Full Time',
+  internship: 'Internship',
 }
 
-const CONTRACT_LABEL = {
-  permanent:   'Permanent',
-  contract:    'Contract',
-  part_time:   'Part Time',
-  full_time:   'Full Time',
-  internship:  'Internship',
-}
+const INTERN_WORDS = ['intern', 'internship', 'stage', 'tirocinio', 'trainee', 'graduate']
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 function resolveCountryCode(name) {
@@ -96,24 +83,7 @@ function resolveCountryCode(name) {
   return entry ? entry[1] : 'gb'
 }
 
-/** Build the `what` query: sector keyword only, no contract type modifier */
-function buildWhat(sectors = []) {
-  const primary = sectors[0]
-  return primary ? (SECTOR_KEYWORD[primary] || primary.toLowerCase()) : ''
-}
-
-/** Build the `where` param: city only — country is already in the URL path */
-function buildWhere(city = '') {
-  return city.trim()
-}
-
-/** Human-readable search description for the banner */
-function buildBannerText(sectors, contractType, city, countryCode) {
-  const sectorLabel = sectors.length ? sectors.slice(0, 2).join(' & ') : 'All sectors'
-  const contractLabel = contractType || 'all contract types'
-  const place = city || CODE_TO_NAME[countryCode] || countryCode.toUpperCase()
-  return `${sectorLabel} · ${contractLabel} · ${place}`
-}
+function buildWhere(city = '') { return city.trim() }
 
 function formatSalary(min, max, countryCode) {
   const sym = CURRENCY[countryCode] || ''
@@ -124,85 +94,77 @@ function formatSalary(min, max, countryCode) {
   return null
 }
 
-// ─── Stop words for keyword matching ───────────────────────────────────────
-const STOP = new Set([
-  'the','a','an','and','or','but','in','on','at','to','for','of','with','by','from',
-  'as','is','are','was','were','be','been','have','has','had','do','does','did',
-  'will','would','could','should','may','might','can','this','that','these','those',
-  'you','we','they','he','she','it','our','your','their','work','role','team','about',
-  'more','also','well','using','looking','strong','within','across','based','while',
-  'both','into','over','some','able','join','help','good','great','experience','skills',
-])
+// ─── Match score ─────────────────────────────────────────────────────────────
+/**
+ * Additive match score based on 4 profile criteria.
+ * Each criterion is included only if the user has set that preference.
+ * Points are scaled proportionally so the total always sums to 100.
+ *
+ *   Country  30 pts  (always present — API already filters by country)
+ *   City     20 pts  (only if user.city is set)
+ *   Sector   25 pts  (only if user.sectors is set)
+ *   Contract 25 pts  (only if user.contractType is set)
+ */
+function computeMatch(raw, countryCode, user) {
+  const title       = (raw.title || '').toLowerCase()
+  const description = (raw.description || '').replace(/<[^>]*>/g, '').toLowerCase()
+  const locationStr = (raw.location?.display_name || '').toLowerCase()
+  const sectors     = user.sectors?.length ? user.sectors : user.sector ? [user.sector] : []
 
-// ─── Match score ────────────────────────────────────────────────────────────
-function computeMatch(raw, countryCode, filters, user) {
-  const description   = (raw.description || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()
-  const contractType  = CONTRACT_LABEL[raw.contract_type] || raw.contract_type || ''
-  const locationStr   = (raw.location?.display_name || '').toLowerCase()
+  const criteria = []  // { weight, score } — score is 0 or 100
 
-  // Base: CV keyword overlap (50–99)
-  const tokenize = (t) =>
-    t.toLowerCase().replace(/[^a-z0-9#+.]/g, ' ').split(/\s+/)
-      .filter((w) => w.length > 3 && !STOP.has(w))
-  let score = 60
-  if (user.cvText && description) {
-    const jobSet = new Set(tokenize(description))
-    const cvSet  = new Set(tokenize(user.cvText))
-    const hits   = [...jobSet].filter((k) => cvSet.has(k)).length
-    score = Math.round(50 + (hits / Math.max(jobSet.size, 1)) * 49)
+  // 1. Country — always added; API path already filters by country → always correct
+  criteria.push({ weight: 30, score: 100 })
+
+  // 2. City — only if user has set a city preference
+  const city = (user.city || '').toLowerCase().trim()
+  if (city) {
+    criteria.push({ weight: 20, score: locationStr.includes(city) ? 100 : 0 })
   }
 
-  // ── Contract type penalty ──────────────────────────────────────────────
-  const userContract  = user.contractType || ''
-  const contractLower = contractType.toLowerCase()
-  const descLower     = description.toLowerCase()
-
-  if (userContract === 'Internship') {
-    const isIntern = contractLower.includes('intern') || descLower.includes('intern') || descLower.includes('stage') || descLower.includes('stagista') || descLower.includes('tirocinio')
-    if (!isIntern) score -= 35
-  } else if (userContract === 'Full-time') {
-    if (contractLower.includes('part') || descLower.includes('internship') || contractLower.includes('intern')) score -= 30
-  } else if (userContract === 'Part-time') {
-    if (!contractLower.includes('part')) score -= 25
-  } else if (userContract === 'Freelance') {
-    if (!contractLower.includes('contract') && !contractLower.includes('freelance')) score -= 20
-  }
-
-  // ── Work mode penalty ──────────────────────────────────────────────────
-  if (user.workMode === 'Remote') {
-    if (!descLower.includes('remote') && !descLower.includes('work from home') && !descLower.includes('wfh'))
-      score -= 15
-  }
-
-  // ── Location penalty ───────────────────────────────────────────────────
-  const countryName = (CODE_TO_NAME[countryCode] || '').toLowerCase()
-  if (countryName && !locationStr.includes(countryName) && locationStr.length > 0)
-    score -= 20
-
-  const city = (user.city || '').toLowerCase()
-  if (city && !locationStr.includes(city))
-    score -= 12
-
-  // ── Salary penalty ─────────────────────────────────────────────────────
-  if (user.salaryMin && raw.salary_max && raw.salary_max < Number(user.salaryMin))
-    score -= 18
-
-  // ── Sector match bonus ─────────────────────────────────────────────────
-  const sectors = user.sectors?.length ? user.sectors : user.sector ? [user.sector] : []
+  // 3. Sector — check title AND description for sector keywords
   if (sectors.length) {
-    const sectorKws = sectors.flatMap((s) => (SECTOR_KEYWORD[s] || s).toLowerCase().split(' '))
-    const matches = sectorKws.filter((kw) => descLower.includes(kw)).length
-    if (matches === 0) score -= 10
-    else if (matches >= 2) score += 5
+    const sectorKws = sectors
+      .flatMap((s) => (SECTOR_KEYWORD[s] || s).toLowerCase().split(' '))
+      .filter((kw) => kw.length > 2)
+    const haystack = `${title} ${description}`
+    const hits = sectorKws.filter((kw) => haystack.includes(kw)).length
+    criteria.push({ weight: 25, score: hits > 0 ? 100 : 0 })
   }
 
-  return Math.min(99, Math.max(10, score))
+  // 4. Contract type — check title for internship/non-internship signals
+  const userContract = user.contractType || ''
+  if (userContract) {
+    const titleHasIntern = INTERN_WORDS.some((w) => title.includes(w))
+    const descHasIntern  = INTERN_WORDS.some((w) => description.includes(w))
+
+    if (userContract === 'Internship') {
+      // Score 100 if title has intern word, 50 if only description, 0 otherwise
+      const s = titleHasIntern ? 100 : descHasIntern ? 50 : 0
+      criteria.push({ weight: 25, score: s })
+    } else if (userContract === 'Full-time' || userContract === 'Part-time') {
+      // Penalise jobs whose title clearly signals internship
+      criteria.push({ weight: 25, score: titleHasIntern ? 0 : 100 })
+    } else {
+      // Freelance or other — no strong signal available
+      criteria.push({ weight: 25, score: 80 })
+    }
+  }
+
+  // Proportional scaling: total active weights → 100
+  const totalWeight = criteria.reduce((sum, c) => sum + c.weight, 0)
+  if (!totalWeight) return 50
+
+  const score = Math.round(
+    criteria.reduce((sum, c) => sum + c.score * c.weight, 0) / totalWeight
+  )
+  return Math.min(100, Math.max(5, score))
 }
 
-function normalizeJob(raw, countryCode, filters, user) {
+function normalizeJob(raw, countryCode, user) {
   const description  = (raw.description || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()
   const contractType = CONTRACT_LABEL[raw.contract_type] || raw.contract_type || null
-  const score        = computeMatch(raw, countryCode, filters, user)
+  const score        = computeMatch(raw, countryCode, user)
 
   return {
     id:          raw.id,
@@ -243,12 +205,20 @@ function SkeletonCard() {
 
 function MatchBadge({ score }) {
   const color =
-    score >= 80 ? 'bg-green-100 text-green-800'
-    : score >= 65 ? 'bg-blue-50 text-apex-blue'
-    : score >= 45 ? 'bg-slate-100 text-slate-600'
+    score === 100 ? 'text-white shadow-sm shadow-emerald-500/30'
+    : score >= 80  ? 'text-white shadow-sm shadow-green-500/30'
+    : score >= 60  ? 'bg-blue-50 text-blue-700'
+    : score >= 35  ? 'bg-slate-100 text-slate-600'
     : 'bg-red-50 text-red-500'
+  const gradient =
+    score === 100 ? 'linear-gradient(135deg,#10b981,#059669)'
+    : score >= 80  ? 'linear-gradient(135deg,#22c55e,#16a34a)'
+    : null
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${color}`}>
+    <span
+      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${color}`}
+      style={gradient ? { background: gradient } : {}}
+    >
       {score}% match
     </span>
   )
@@ -264,32 +234,38 @@ const TYPE_COLORS = {
 
 function JobCard({ job, applied, onApply, onTailor }) {
   return (
-    <div className="p-6 bg-white rounded-xl border border-slate-200 hover:border-apex-blue/30 hover:shadow-sm transition-all">
+    <div className="p-6 bg-white rounded-xl border border-slate-100 hover:border-blue-100 hover:shadow-md transition-all duration-200 group">
       <div className="flex items-start justify-between gap-6">
         <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2 mb-1.5">
-            <h3 className="font-semibold text-apex-text">{job.title}</h3>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <h3 className="font-bold text-slate-900 text-base group-hover:text-blue-700 transition-colors">{job.title}</h3>
             <MatchBadge score={job.score} />
             {job.type && (
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_COLORS[job.type] || 'bg-slate-100 text-slate-700'}`}>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${TYPE_COLORS[job.type] || 'bg-slate-100 text-slate-600'}`}>
                 {job.type}
               </span>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-1.5 text-sm text-apex-muted mb-3">
-            <span className="font-medium text-apex-text">{job.company}</span>
-            <span>·</span>
-            <span>{job.location}</span>
-            {job.salary && <><span>·</span><span className="font-medium text-emerald-700">{job.salary}</span></>}
+          <div className="flex flex-wrap items-center gap-1.5 text-sm mb-3">
+            <span className="font-semibold text-slate-700">{job.company}</span>
+            <span className="text-slate-300">·</span>
+            <span className="text-slate-500">{job.location}</span>
+            {job.salary && (
+              <>
+                <span className="text-slate-300">·</span>
+                <span className="font-semibold text-emerald-600 text-xs">{job.salary}</span>
+              </>
+            )}
           </div>
           {job.description && (
-            <p className="text-sm text-apex-muted leading-relaxed line-clamp-2">{job.description}</p>
+            <p className="text-sm text-slate-400 leading-relaxed line-clamp-2">{job.description}</p>
           )}
         </div>
-        <div className="flex flex-col gap-2 flex-shrink-0">
+        <div className="flex flex-col gap-2 flex-shrink-0 min-w-[148px]">
           <button
             onClick={() => onTailor(job)}
-            className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95 transition-opacity"
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-white hover:opacity-90 transition-opacity shadow-sm shadow-blue-500/20"
+            style={{ background: 'linear-gradient(135deg, #2563EB, #38BDF8)' }}
           >
             ✦ Tailor Application
           </button>
@@ -298,8 +274,8 @@ function JobCard({ job, applied, onApply, onTailor }) {
             disabled={applied}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all text-center ${
               applied
-                ? 'bg-green-50 text-green-700 border border-green-200 cursor-default'
-                : 'border border-slate-200 text-apex-text hover:bg-slate-50'
+                ? 'bg-green-50 text-green-700 border border-green-100 cursor-default'
+                : 'border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
             }`}
           >
             {applied ? '✓ Applied' : 'Mark Applied'}
@@ -310,7 +286,7 @@ function JobCard({ job, applied, onApply, onTailor }) {
   )
 }
 
-function EmptyState({ filters, onBroaden }) {
+function EmptyState({ hasCity, hasContract, onBroaden }) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 px-8 py-14 text-center">
       <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
@@ -320,25 +296,19 @@ function EmptyState({ filters, onBroaden }) {
       </div>
       <h3 className="font-semibold text-apex-text mb-1">No jobs found</h3>
       <p className="text-sm text-apex-muted mb-5 max-w-sm mx-auto">
-        Adzuna didn't return results for your current filters. Try broadening your search.
+        No results for your current filters. Try broadening your search.
       </p>
       <div className="flex flex-wrap gap-2 justify-center">
-        {filters.where && (
+        {hasCity && (
           <button onClick={() => onBroaden('where')}
             className="px-3.5 py-1.5 rounded-full text-sm border border-slate-200 text-apex-muted hover:border-apex-blue hover:text-apex-blue transition-colors">
-            Remove location filter
+            Remove city filter
           </button>
         )}
-        {filters.contractType && (
+        {hasContract && (
           <button onClick={() => onBroaden('contractType')}
             className="px-3.5 py-1.5 rounded-full text-sm border border-slate-200 text-apex-muted hover:border-apex-blue hover:text-apex-blue transition-colors">
-            Remove contract type filter
-          </button>
-        )}
-        {(filters.salaryMin || filters.salaryMax) && (
-          <button onClick={() => onBroaden('salary')}
-            className="px-3.5 py-1.5 rounded-full text-sm border border-slate-200 text-apex-muted hover:border-apex-blue hover:text-apex-blue transition-colors">
-            Remove salary filter
+            Show all contract types
           </button>
         )}
       </div>
@@ -350,36 +320,44 @@ function EmptyState({ filters, onBroaden }) {
 export default function Discover() {
   const { user, applications, addApplication } = useUser()
   const navigate = useNavigate()
+  const abortRef = useRef(null)
 
-  const [jobs, setJobs]           = useState([])
-  const [loading, setLoading]     = useState(false)
-  const [error, setError]         = useState(null)
-  const [banner, setBanner]       = useState(null)   // search context shown after fetch
+  const [jobs, setJobs]             = useState([])
+  const [loading, setLoading]       = useState(false)
+  const [error, setError]           = useState(null)
+  const [banner, setBanner]         = useState(null)
+  const [keyword, setKeyword]       = useState('')       // search bar input
+  const [activeKeyword, setActiveKeyword] = useState('') // keyword used in last fetch
   const [appliedIds, setAppliedIds] = useState(
     () => new Set(applications.map((a) => a.id))
   )
 
-  // Filters — pre-populated from user profile
   const [filters, setFilters] = useState(() => ({
-    countryCode:  resolveCountryCode(user.country),
-    where:        user.city || '',
-    contractType: CONTRACT_TO_ADZUNA[user.contractType] || '',
-    salaryMin:    user.salaryMin  || '',
-    salaryMax:    user.salaryMax  || '',
+    countryCode: resolveCountryCode(user.country),
+    where:       '',   // start empty — user types city in English
+    salaryMin:   user.salaryMin || '',
+    salaryMax:   user.salaryMax || '',
   }))
 
-  const sectors = user.sectors?.length ? user.sectors : user.sector ? [user.sector] : []
+  const sectors     = user.sectors?.length ? user.sectors : user.sector ? [user.sector] : []
+  const userContract = user.contractType || ''
 
-  const fetchJobs = async (f = filters) => {
+  const fetchJobs = async (f = filters, kw = activeKeyword) => {
+    if (abortRef.current) abortRef.current.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
     setLoading(true)
     setError(null)
     try {
-      const what  = buildWhat(sectors)   // sector keyword only, no modifiers
-      const where = buildWhere(f.where)  // city only, never country name
+      // `what`: keyword from search bar takes priority; fall back to sector keyword
+      const sectorKw = sectors.length
+        ? (SECTOR_KEYWORD[sectors[0]] || sectors[0].toLowerCase())
+        : ''
+      const what  = (kw.trim() || sectorKw).trim()
+      const where = buildWhere(f.where)
 
-      // Build URL manually — encodeURIComponent on all dynamic values
-      // contract_type is NOT sent to Adzuna (unsupported); filtered client-side
-      let query = `app_id=${APP_ID}&app_key=${APP_KEY}&results_per_page=10&content-type=application/json`
+      let query = `app_id=${APP_ID}&app_key=${APP_KEY}&results_per_page=20`
       if (what)        query += `&what=${encodeURIComponent(what)}`
       if (where)       query += `&where=${encodeURIComponent(where)}`
       if (f.salaryMin) query += `&salary_min=${encodeURIComponent(f.salaryMin)}`
@@ -388,35 +366,41 @@ export default function Discover() {
       const url = `/api/adzuna/v1/api/jobs/${f.countryCode}/search/1?${query}`
       console.log('[Adzuna] GET', url.replace(APP_KEY, '***'))
 
-      const res = await fetch(url)
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json' },
+      })
       if (!res.ok) {
         const body = await res.text().catch(() => '')
         console.error('[Adzuna] Error', res.status, body)
         throw new Error(`Adzuna API error ${res.status}`)
       }
       const data = await res.json()
+      console.log('[Adzuna] total:', data.count, '— page results:', data.results?.length)
 
-      let normalized = (data.results || [])
-        .map((j) => normalizeJob(j, f.countryCode, f, user))
+      let normalized = (data.results || []).map((j) => normalizeJob(j, f.countryCode, user))
 
-      // Client-side contract type filter (Adzuna doesn't support contract_type reliably)
-      if (f.contractType) {
-        const keep = f.contractType.toLowerCase().replace('_', ' ')
+      // ── Contract type hard filter ─────────────────────────────────────────
+      if (userContract === 'Internship') {
         normalized = normalized.filter((j) => {
-          const t = (j.type || '').toLowerCase()
-          return t.includes(keep) || t === keep
+          const haystack = `${j.title} ${j.description}`.toLowerCase()
+          return INTERN_WORDS.some((w) => haystack.includes(w))
+        })
+      } else if (userContract === 'Full-time' || userContract === 'Part-time') {
+        normalized = normalized.filter((j) => {
+          const title = j.title.toLowerCase()
+          return !title.includes('intern') && !title.includes('trainee')
         })
       }
 
       normalized.sort((a, b) => b.score - a.score)
       setJobs(normalized)
-      setBanner({
-        text: buildBannerText(sectors, user.contractType, f.where, f.countryCode),
-        count: normalized.length,
-        what,
-        where,
-      })
+
+      const place = where || CODE_TO_NAME[f.countryCode] || f.countryCode.toUpperCase()
+      const searchDesc = [kw.trim() || sectorKw || 'All jobs', place].filter(Boolean).join(' · ')
+      setBanner({ text: searchDesc, count: normalized.length })
     } catch (err) {
+      if (err.name === 'AbortError') return
       console.error('[Discover] fetch error:', err)
       setError('Could not load jobs. Check your connection and try again.')
     } finally {
@@ -424,7 +408,15 @@ export default function Discover() {
     }
   }
 
-  useEffect(() => { fetchJobs() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    fetchJobs()
+    return () => { if (abortRef.current) abortRef.current.abort() }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSearch = () => {
+    setActiveKeyword(keyword)
+    fetchJobs(filters, keyword)
+  }
 
   const handleApply = (job) => {
     addApplication(job)
@@ -435,38 +427,63 @@ export default function Discover() {
 
   const handleBroaden = (key) => {
     const updated = { ...filters }
-    if (key === 'where')        updated.where = ''
-    if (key === 'contractType') updated.contractType = ''
-    if (key === 'salary')       { updated.salaryMin = ''; updated.salaryMax = '' }
+    if (key === 'where') updated.where = ''
     setFilters(updated)
-    fetchJobs(updated)
+    fetchJobs(updated, activeKeyword)
   }
 
   return (
-    <div className="p-8">
+    <div className="p-8 page-fade-in">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-apex-text">Discover</h1>
-        <p className="text-apex-muted mt-1">Live jobs ranked by your profile match score</p>
+        <h1 className="text-2xl font-bold text-slate-900">Discover</h1>
+        <p className="text-slate-500 mt-1 text-sm">Live jobs ranked by your profile match score</p>
       </div>
 
-      {/* Search context banner */}
-      {banner && !loading && (
-        <div className="flex items-center gap-2 px-4 py-2.5 mb-5 bg-blue-50 border border-blue-100 rounded-xl text-sm">
-          <svg className="w-4 h-4 text-apex-blue flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      {/* ── Main search bar ── */}
+      <div className="mb-4">
+        <div className="flex gap-3 items-center bg-white border border-slate-200 rounded-xl px-4 py-3.5 shadow-sm focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-150">
+          <svg className="w-5 h-5 text-apex-muted flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
-          <span className="text-apex-blue font-medium">Showing results for:</span>
-          <span className="text-apex-text">{banner.text}</span>
-          <span className="ml-auto text-apex-muted flex-shrink-0">{banner.count} jobs found</span>
+          <input
+            id="keyword-search"
+            name="keyword-search"
+            type="text"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            placeholder="Search jobs, skills, companies…"
+            className="flex-1 text-apex-text placeholder-slate-400 bg-transparent outline-none text-base"
+          />
+          {keyword && (
+            <button
+              onClick={() => { setKeyword(''); setActiveKeyword(''); fetchJobs(filters, '') }}
+              className="text-slate-400 hover:text-apex-text transition-colors flex-shrink-0"
+              aria-label="Clear search"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+          <button
+            onClick={handleSearch}
+            disabled={loading}
+            className="px-5 py-2 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95 transition-opacity disabled:opacity-60 flex-shrink-0"
+          >
+            {loading ? 'Searching…' : 'Search'}
+          </button>
         </div>
-      )}
+      </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6 flex flex-wrap gap-3 items-end">
+      {/* ── Secondary filters ── */}
+      <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 mb-5 flex flex-wrap gap-3 items-end">
         <div>
-          <label className="block text-xs font-medium text-apex-muted mb-1.5">Country</label>
+          <label htmlFor="filter-country" className="block text-xs font-medium text-apex-muted mb-1.5">Country</label>
           <select
+            id="filter-country"
+            name="filter-country"
             value={filters.countryCode}
             onChange={(e) => setFilter('countryCode', e.target.value)}
             className="px-3 py-2 rounded-lg border border-slate-200 text-sm text-apex-text bg-white focus:outline-none focus:ring-2 focus:ring-apex-blue"
@@ -478,34 +495,23 @@ export default function Discover() {
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-apex-muted mb-1.5">City / Location</label>
+          <label htmlFor="filter-city" className="block text-xs font-medium text-apex-muted mb-1.5">City</label>
           <input
+            id="filter-city"
+            name="filter-city"
             value={filters.where}
             onChange={(e) => setFilter('where', e.target.value)}
-            placeholder="e.g. Milan"
+            onKeyDown={(e) => e.key === 'Enter' && fetchJobs()}
+            placeholder="e.g. Milan, Rome"
             className="w-32 px-3 py-2 rounded-lg border border-slate-200 text-sm text-apex-text placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-apex-blue"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-apex-muted mb-1.5">Contract type</label>
-          <select
-            value={filters.contractType}
-            onChange={(e) => setFilter('contractType', e.target.value)}
-            className="px-3 py-2 rounded-lg border border-slate-200 text-sm text-apex-text bg-white focus:outline-none focus:ring-2 focus:ring-apex-blue"
-          >
-            <option value="">All types</option>
-            <option value="permanent">Permanent</option>
-            <option value="full_time">Full Time</option>
-            <option value="part_time">Part Time</option>
-            <option value="contract">Contract</option>
-            <option value="internship">Internship</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-apex-muted mb-1.5">Min salary</label>
+          <label htmlFor="filter-salary-min" className="block text-xs font-medium text-apex-muted mb-1.5">Min salary</label>
           <input
+            id="filter-salary-min"
+            name="filter-salary-min"
             type="number"
             placeholder="e.g. 25000"
             value={filters.salaryMin}
@@ -515,8 +521,10 @@ export default function Discover() {
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-apex-muted mb-1.5">Max salary</label>
+          <label htmlFor="filter-salary-max" className="block text-xs font-medium text-apex-muted mb-1.5">Max salary</label>
           <input
+            id="filter-salary-max"
+            name="filter-salary-max"
             type="number"
             placeholder="e.g. 60000"
             value={filters.salaryMax}
@@ -528,11 +536,23 @@ export default function Discover() {
         <button
           onClick={() => fetchJobs()}
           disabled={loading}
-          className="px-5 py-2 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95 transition-opacity disabled:opacity-60"
+          className="px-4 py-2 rounded-lg text-sm font-medium border border-slate-200 text-apex-text hover:bg-slate-50 transition-colors disabled:opacity-60"
         >
-          {loading ? 'Searching…' : 'Search'}
+          Apply filters
         </button>
       </div>
+
+      {/* Search context banner */}
+      {banner && !loading && (
+        <div className="flex items-center gap-2 px-4 py-2.5 mb-5 bg-blue-50 border border-blue-100 rounded-xl text-sm">
+          <svg className="w-4 h-4 text-apex-blue flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <span className="text-apex-blue font-medium">Results for:</span>
+          <span className="text-apex-text">{banner.text}</span>
+          <span className="ml-auto text-apex-muted flex-shrink-0">{banner.count} jobs</span>
+        </div>
+      )}
 
       {/* Results */}
       <div className="space-y-4">
@@ -552,7 +572,11 @@ export default function Discover() {
         )}
 
         {!loading && !error && jobs.length === 0 && (
-          <EmptyState filters={filters} onBroaden={handleBroaden} />
+          <EmptyState
+            hasCity={!!filters.where}
+            hasContract={!!userContract}
+            onBroaden={handleBroaden}
+          />
         )}
 
         {!loading && jobs.map((job) => (

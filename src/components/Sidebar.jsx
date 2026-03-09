@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import Logo from './Logo'
+import { useUser } from '../context/UserContext'
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
@@ -10,43 +10,101 @@ const navItems = [
 ]
 
 function Sidebar() {
+  const { user, session, signOut } = useUser()
+
+  const initials = user.name
+    ? user.name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()
+    : '?'
+
+  const email = session?.user?.email || ''
+
   return (
-    <aside className="w-64 flex-shrink-0 border-r border-slate-200 bg-white">
-      <div className="flex flex-col h-full">
-        <div className="p-6 border-b border-slate-200">
-          <Logo size="md" />
-        </div>
-        <nav className="flex-1 p-3 space-y-0.5">
-          {navItems.map(({ to, label, icon }, i) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={i === 0}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-blue-50 text-apex-blue'
-                    : 'text-apex-muted hover:bg-slate-50 hover:text-apex-text'
-                }`
-              }
-            >
-              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon} />
-              </svg>
-              {label}
-            </NavLink>
-          ))}
-        </nav>
-        <div className="p-3 border-t border-slate-200">
+    <aside className="w-60 flex-shrink-0 flex flex-col bg-white border-r border-slate-100" style={{ minHeight: '100vh' }}>
+      {/* Logo */}
+      <div className="px-5 py-5 border-b border-slate-100">
+        <img src="/apex_full_logo.png" alt="APEX" className="h-8 w-auto object-contain" />
+      </div>
+
+      {/* Nav */}
+      <nav className="flex-1 px-3 py-4 space-y-0.5">
+        {navItems.map(({ to, label, icon }, i) => (
           <NavLink
-            to="/"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-apex-muted hover:bg-slate-50 hover:text-apex-text"
+            key={to}
+            to={to}
+            end={i === 0}
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 relative ${
+                isActive
+                  ? 'bg-blue-50 text-blue-600'
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+              }`
+            }
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            Back to Home
+            {({ isActive }) => (
+              <>
+                {isActive && (
+                  <span
+                    className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-blue-600"
+                    style={{ left: '-4px' }}
+                  />
+                )}
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={isActive ? 2.2 : 1.8} d={icon} />
+                </svg>
+                {label}
+              </>
+            )}
           </NavLink>
+        ))}
+      </nav>
+
+      {/* User + actions */}
+      <div className="px-3 py-4 border-t border-slate-100 space-y-1">
+        {/* User info */}
+        {(user.name || email) && (
+          <div className="flex items-center gap-3 px-3 py-2.5 mb-1">
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-bold"
+              style={{ background: 'linear-gradient(135deg, #2563EB, #38BDF8)' }}
+            >
+              {initials}
+            </div>
+            <div className="min-w-0">
+              {user.name && <p className="text-sm font-medium text-slate-800 truncate">{user.name}</p>}
+              {email && <p className="text-xs text-slate-400 truncate">{email}</p>}
+            </div>
+          </div>
+        )}
+
+        <NavLink
+          to="/"
+          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-400 hover:bg-slate-50 hover:text-slate-700 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Back to Home
+        </NavLink>
+
+        <button
+          onClick={signOut}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+          Sign out
+        </button>
+
+        {/* Brand signature */}
+        <div className="flex justify-center pt-3">
+          <img
+            src="/apex_x_blue.png"
+            alt=""
+            aria-hidden="true"
+            className="w-6 h-6 object-contain"
+            style={{ opacity: 0.35 }}
+          />
         </div>
       </div>
     </aside>

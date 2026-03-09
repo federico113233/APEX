@@ -20,10 +20,10 @@ const LANG_LEVELS   = ['Native', 'Fluent', 'Advanced', 'Intermediate', 'Basic']
 
 function Section({ title, description, children }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-5">
-      <div className="pb-4 border-b border-slate-100">
-        <h2 className="font-semibold text-apex-text">{title}</h2>
-        {description && <p className="text-sm text-apex-muted mt-0.5">{description}</p>}
+    <div className="bg-white rounded-xl border border-slate-100 p-7 space-y-6 shadow-sm">
+      <div className="pb-5 border-b border-slate-100">
+        <h2 className="font-bold text-slate-900 text-base">{title}</h2>
+        {description && <p className="text-sm text-slate-400 mt-0.5">{description}</p>}
       </div>
       {children}
     </div>
@@ -33,9 +33,9 @@ function Section({ title, description, children }) {
 function Field({ label, hint, children }) {
   return (
     <div className="space-y-1.5">
-      <label className="block text-sm font-medium text-apex-text">
+      <label className="block text-sm font-semibold text-slate-700">
         {label}
-        {hint && <span className="ml-1.5 text-xs font-normal text-apex-muted">{hint}</span>}
+        {hint && <span className="ml-1.5 text-xs font-normal text-slate-400">{hint}</span>}
       </label>
       {children}
     </div>
@@ -130,21 +130,21 @@ export default function Profile() {
     ? form.name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()
     : '?'
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault()
-    updateProfile({ ...form, cvText })
+    await updateProfile({ ...form, cvText })
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
   }
 
   const inputClass =
-    'w-full px-4 py-2.5 rounded-lg border border-slate-200 text-apex-text placeholder-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-apex-blue focus:border-transparent'
+    'w-full px-4 py-2.5 rounded-lg border border-slate-200 text-slate-900 placeholder-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow text-sm'
 
   return (
-    <div className="p-8 max-w-2xl">
+    <div className="p-8 max-w-2xl page-fade-in">
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-apex-text">Profile</h1>
-        <p className="text-apex-muted mt-1">
+        <h1 className="text-2xl font-bold text-slate-900">Profile</h1>
+        <p className="text-slate-500 mt-1 text-sm">
           Used by Alex and the Tailoring Lab to personalise your experience.
         </p>
       </div>
@@ -154,13 +154,16 @@ export default function Profile() {
         {/* ── Personal info ── */}
         <Section title="Personal info">
           {/* Avatar */}
-          <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
-            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-apex-blue to-apex-cyan flex items-center justify-center flex-shrink-0 shadow-sm">
+          <div className="flex items-center gap-4 pb-5 border-b border-slate-100">
+            <div
+              className="w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0 shadow-md"
+              style={{ background: 'linear-gradient(135deg, #2563EB, #38BDF8)' }}
+            >
               <span className="text-white font-bold text-xl">{initials}</span>
             </div>
             <div>
-              <p className="font-semibold text-apex-text">{form.name || 'Your name'}</p>
-              <p className="text-sm text-apex-muted">
+              <p className="font-bold text-slate-900 text-base">{form.name || 'Your name'}</p>
+              <p className="text-sm text-slate-400 mt-0.5">
                 {form.sectors.length ? form.sectors.slice(0, 2).join(' · ') : form.sector || 'No sector set'}
                 {form.country ? ` · ${form.country}` : ''}
               </p>
@@ -185,11 +188,11 @@ export default function Profile() {
             />
           </Field>
 
-          <Field label="City" hint="(optional)">
+          <Field label="City" hint="(optional — write in English)">
             <input
               value={form.city}
               onChange={(e) => set('city', e.target.value)}
-              placeholder="e.g. Milan"
+              placeholder="e.g. Milan, Rome, Turin"
               className={inputClass}
             />
           </Field>
@@ -310,12 +313,13 @@ export default function Profile() {
         <div className="flex items-center gap-4 pb-8">
           <button
             type="submit"
-            className="px-6 py-2.5 rounded-lg font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95 transition-opacity"
+            className="px-6 py-2.5 rounded-lg font-semibold text-white text-sm hover:opacity-90 transition-opacity shadow-md shadow-blue-500/20"
+            style={{ background: 'linear-gradient(135deg, #2563EB, #38BDF8)' }}
           >
             Save changes
           </button>
           {saved && (
-            <span className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium">
+            <span className="flex items-center gap-1.5 text-sm text-emerald-600 font-semibold">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>

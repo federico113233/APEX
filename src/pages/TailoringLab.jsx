@@ -1,303 +1,676 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import Anthropic from '@anthropic-ai/sdk'
+import {
+  Document, Packer, Paragraph, TextRun,
+  AlignmentType, Footer, PageNumber, LevelFormat, BorderStyle,
+} from 'docx'
 import { useUser } from '../context/UserContext'
+import { supabase } from '../lib/supabase'
 
-// ─── Skill extraction from free-text description ──────────────────────────
-const KNOWN_SKILLS = [
-  'python', 'javascript', 'typescript', 'react', 'java', 'sql', 'excel',
-  'powerpoint', 'figma', 'machine learning', 'data analysis', 'leadership',
-  'project management', 'agile', 'aws', 'communication', 'finance', 'marketing',
-  'research', 'design', 'analytics', 'c++', 'node.js', 'tableau', 'r', 'matlab',
-  'tensorflow', 'pandas', 'consulting', 'strategy', 'operations', 'ux', 'ui',
-  'product management', 'git', 'docker', 'kubernetes', 'scala', 'go', 'rust',
-]
+// ─── Constants ───────────────────────────────────────────────────────────────
+const MODEL = 'claude-sonnet-4-20250514'
 
-function extractSkills(description = '', max = 6) {
-  const lower = description.toLowerCase()
-  const found = KNOWN_SKILLS.filter((s) => lower.includes(s))
-  return found.length ? found.slice(0, max) : ['analysis', 'communication', 'excel', 'teamwork', 'research', 'organisation']
+const SYSTEM_PROMPT = `You are an expert career coach and CV writer with 15 years of experience helping students land jobs at top companies. Your task is to tailor a student's CV and write a cover letter for a specific job posting.
+
+STRICT RULES:
+- NEVER invent experience, skills, or qualifications not present in the original CV
+- ONLY reframe, reorder, and rephrase what already exists in the CV
+- Optimize naturally for ATS by integrating exact keywords from the job description
+- Adapt the narrative tone to the company culture (startup=bold/results-driven, corporate=structured/methodical, creative=innovative/passionate)
+- Rewrite bullet points with strong action verbs and quantifiable results where possible
+- If information is missing or unclear, ask the student targeted clarifying questions BEFORE generating
+
+OUTPUT FORMAT:
+First output the tailored CV in clean format.
+Then output exactly this separator: |||COVER_LETTER|||
+Then output the cover letter.
+Then output exactly this separator: |||QUESTIONS|||
+Then output any clarifying questions you have for the student (empty if none).`
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function getClient() {
+  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
+  if (!apiKey) throw new Error('VITE_ANTHROPIC_API_KEY is not set in .env.local')
+  return new Anthropic({ apiKey, dangerouslyAllowBrowser: true })
 }
 
-// ─── Document generators ──────────────────────────────────────────────────
-function generateCV(user, job) {
-  const name     = user.name    || 'Your Name'
-  const country  = user.country || 'your country'
-  const sectors  = user.sectors?.length ? user.sectors : user.sector ? [user.sector] : ['professional']
-  const sector   = sectors[0]
-  const skills   = job.keywords?.slice(0, 6) ?? extractSkills(job.description)
-
-  const linkedin = user.linkedinUrl
-    ? user.linkedinUrl.replace(/^https?:\/\//, '')
-    : `linkedin.com/in/${name.toLowerCase().replace(/\s+/g, '-')}`
-
-  const langLine = user.languages?.filter((l) => l.lang).length
-    ? user.languages.filter((l) => l.lang).map((l) => `${l.lang} (${l.level})`).join('  ·  ')
-    : `English (Fluent)${country === 'Italy' ? '  ·  Italian (Native)' : ''}`
-
-  const contractNote = user.contractType ? ` · Open to ${user.contractType}` : ''
-  const modeNote     = user.workMode     ? ` · ${user.workMode}`              : ''
-
-  return `${name.toUpperCase()}
-${country}  ·  ${linkedin}  ·  your@email.com${contractNote}${modeNote}
-
-──────────────────────────────────────────────────
-
-PROFESSIONAL SUMMARY
-Motivated ${sector} professional with a strong foundation in ${skills.slice(0, 3).join(', ')}, seeking the ${job.title} role at ${job.company}. Proven ability to deliver high-impact work in collaborative environments, with a track record of taking ownership and driving results. Eager to contribute to ${job.company}'s mission and grow within a world-class team.
-
-──────────────────────────────────────────────────
-
-EDUCATION
-BSc ${sector === 'Technology' ? 'Computer Science' : sector === 'Finance' ? 'Economics & Finance' : sector}
-University of [Name]  ·  Expected 2025  ·  GPA: 3.8 / 4.0
-Relevant coursework: ${skills.slice(2, 5).join(', ')}
-
-──────────────────────────────────────────────────
-
-EXPERIENCE
-
-${sector} Analyst Intern — [Previous Company], ${country}
-Jun 2024 – Sep 2024
-• Delivered [key project] improving team efficiency by 25%, working cross-functionally with 3 departments
-• Analysed datasets of 50k+ records using ${skills[0]} and ${skills[1] || 'relevant tools'}, presenting insights to senior management
-• Reduced reporting turnaround by 18% through workflow automation and process documentation
-
-Project Lead — [University Name]
-Oct 2023 – May 2024
-• Led a team of 4 to build a ${skills[0]}-based solution adopted by 200+ students
-• Presented findings at faculty showcase and awarded Best Project in ${sector}
-• Coordinated stakeholder interviews, sprint planning, and final delivery under tight deadlines
-
-──────────────────────────────────────────────────
-
-SKILLS
-Technical:  ${skills.join('  ·  ')}
-Languages:  ${langLine}
-Tools:      Microsoft Office  ·  Google Workspace  ·  Notion  ·  Slack
-
-──────────────────────────────────────────────────
-
-ACHIEVEMENTS & ACTIVITIES
-• ${job.company} Virtual Experience Programme — Top 10% of global participants (2024)
-• Hackathon Winner — [Event Name], ${country}, 2024
-• ${sectors.slice(0, 2).join(' & ')} Society, Committee Member — Organised 3 events, 100+ attendees`
-}
-
-function generateCoverLetter(user, job) {
-  const name    = user.name    || 'Your Name'
-  const country = user.country || 'your country'
-  const today   = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
-  const skills  = job.keywords?.slice(0, 3) ?? extractSkills(job.description, 3)
+function buildUserMessage(user, job, answers = {}) {
   const sectors = user.sectors?.length ? user.sectors : user.sector ? [user.sector] : []
-  const sectorLabel = sectors[0] || job.title.split(' ')[0]
+  const langs = user.languages?.filter((l) => l.lang).map((l) => `${l.lang} (${l.level})`).join(', ')
+  const salary = (user.salaryMin || user.salaryMax)
+    ? `${user.salaryCurrency || '€'}${user.salaryMin || '?'} – ${user.salaryCurrency || '€'}${user.salaryMax || '?'}`
+    : null
 
-  const descriptionSnippet = job.description
-    ? job.description.split('.')[0].toLowerCase()
-    : `${job.title} excellence`
+  let msg = `STUDENT PROFILE:
+Name: ${user.name || 'Not provided'}
+Location: ${[user.city, user.country].filter(Boolean).join(', ') || 'Not provided'}
+Sectors of interest: ${sectors.join(', ') || 'Not specified'}
+Contract preference: ${user.contractType || 'Not specified'}
+Work mode: ${user.workMode || 'Not specified'}
+${langs ? `Languages: ${langs}\n` : ''}${salary ? `Salary expectation: ${salary}\n` : ''}${user.linkedinUrl ? `LinkedIn: ${user.linkedinUrl}\n` : ''}
+STUDENT'S CV:
+${user.cvText?.trim() || '[No CV provided — use the profile information above and create a strong draft that the student can then personalise]'}
 
-  const linkedin = user.linkedinUrl
-    ? `\nLinkedIn: ${user.linkedinUrl.replace(/^https?:\/\//, '')}`
-    : ''
+JOB DETAILS:
+Title: ${job.title}
+Company: ${job.company}
+Location: ${job.location || 'Not specified'}
+Full Job Description:
+${job.description || 'Not provided'}`
 
-  const modeNote = user.workMode
-    ? ` I am specifically interested in ${user.workMode.toLowerCase()} opportunities and ${job.location ? `${job.location} fits well` : 'your setup aligns with my preferences'}.`
-    : ''
+  const answeredPairs = Object.entries(answers).filter(([, v]) => v?.trim())
+  if (answeredPairs.length) {
+    msg += `\n\nSTUDENT'S ANSWERS TO YOUR PREVIOUS CLARIFYING QUESTIONS:\n`
+    answeredPairs.forEach(([q, a]) => { msg += `Q: ${q}\nA: ${a}\n\n` })
+  }
 
-  return `${name}
-${country}  ·  your@email.com${linkedin}
-
-${today}
-
-Hiring Team
-${job.title}
-${job.company}${job.location ? ` — ${job.location}` : ''}
-
-──────────────────────────────────────────────────
-
-Dear Hiring Manager,
-
-I am writing to express my strong interest in the ${job.title} position at ${job.company}. Having closely followed ${job.company}'s work — in particular its focus on ${descriptionSnippet} — I am genuinely excited about the opportunity to contribute my skills in ${skills.join(', ')} to your team.${modeNote}
-
-During my internship at [Previous Company], I gained hands-on experience with ${skills[0]} and ${skills[1] || 'related tools'}, delivering a project that improved team efficiency by 25%. I am someone who takes ownership from day one, works well in cross-functional teams, and is not afraid to ask the right questions. These qualities, combined with my deep interest in ${sectorLabel}, make me confident I can add real value at ${job.company} from the very start.
-
-I would welcome the chance to discuss how my background and drive align with what your team is building. I am available for an interview at your convenience and look forward to hearing from you.
-
-Warm regards,
-${name}`
+  msg += `\nPlease tailor the CV and write the cover letter following your output format exactly.`
+  return msg
 }
 
-// ─── Main component ───────────────────────────────────────────────────────
+function parseResponse(raw) {
+  const [cvPart = '', rest = ''] = raw.split('|||COVER_LETTER|||')
+  const [coverPart = '', qPart = ''] = rest.split('|||QUESTIONS|||')
+
+  const questions = qPart
+    .split('\n')
+    .map((l) => l.replace(/^[\d\.\-\*•]\s*/, '').trim())
+    .filter((l) => l.length > 10 && !/^(none|n\/a|no questions?)\.?$/i.test(l))
+
+  return {
+    cv: cvPart.trim(),
+    cover: coverPart.trim(),
+    questions,
+  }
+}
+
+// Parse inline markdown (**bold**, *italic*, ***bold-italic***) into TextRun[]
+function parseInline(text, baseSize = 22) {
+  const runs = []
+  // Pattern: ***bold+italic***, **bold**, *italic*, or plain text
+  const re = /(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|([^*]+))/g
+  let m
+  while ((m = re.exec(text)) !== null) {
+    if (m[2] !== undefined) {
+      runs.push(new TextRun({ text: m[2], bold: true, italics: true, size: baseSize, font: 'Calibri' }))
+    } else if (m[3] !== undefined) {
+      runs.push(new TextRun({ text: m[3], bold: true, size: baseSize, font: 'Calibri' }))
+    } else if (m[4] !== undefined) {
+      runs.push(new TextRun({ text: m[4], italics: true, size: baseSize, font: 'Calibri' }))
+    } else if (m[5] !== undefined) {
+      runs.push(new TextRun({ text: m[5], size: baseSize, font: 'Calibri' }))
+    }
+  }
+  return runs.length ? runs : [new TextRun({ text, size: baseSize, font: 'Calibri' })]
+}
+
+// Convert markdown text to an array of docx Paragraph objects
+function markdownToParagraphs(text, isCV = false, userName = '') {
+  const lines = text.split('\n')
+  const paragraphs = []
+
+  // CV: name header at top
+  if (isCV && userName) {
+    paragraphs.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 120 },
+        children: [new TextRun({ text: userName, bold: true, size: 44, font: 'Calibri' })],
+      })
+    )
+  }
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+
+    // Blank line → small spacer
+    if (!trimmed) {
+      paragraphs.push(new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text: '' })] }))
+      continue
+    }
+
+    // # Heading 1
+    if (/^# (.+)/.test(trimmed)) {
+      const content = trimmed.replace(/^# /, '')
+      paragraphs.push(new Paragraph({
+        spacing: { before: 200, after: 100 },
+        children: [new TextRun({ text: content, bold: true, size: 36, font: 'Calibri' })],
+      }))
+      continue
+    }
+
+    // ## Heading 2
+    if (/^## (.+)/.test(trimmed)) {
+      const content = trimmed.replace(/^## /, '')
+      paragraphs.push(new Paragraph({
+        spacing: { before: 160, after: 80 },
+        children: [new TextRun({ text: content, bold: true, size: 28, font: 'Calibri' })],
+      }))
+      continue
+    }
+
+    // ### Heading 3
+    if (/^### (.+)/.test(trimmed)) {
+      const content = trimmed.replace(/^### /, '')
+      paragraphs.push(new Paragraph({
+        spacing: { before: 120, after: 60 },
+        children: [new TextRun({ text: content, bold: true, size: 24, font: 'Calibri' })],
+      }))
+      continue
+    }
+
+    // Horizontal rule (--- or ─── or ═══)
+    if (/^(-{3,}|─{3,}|={3,})$/.test(trimmed)) {
+      paragraphs.push(new Paragraph({
+        spacing: { before: 80, after: 80 },
+        border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: 'CCCCCC' } },
+        children: [new TextRun({ text: '' })],
+      }))
+      continue
+    }
+
+    // Bullet point (- or * or •)
+    if (/^[-*•] (.+)/.test(trimmed)) {
+      const content = trimmed.replace(/^[-*•] /, '')
+      paragraphs.push(new Paragraph({
+        bullet: { level: 0 },
+        spacing: { after: 60 },
+        children: parseInline(content),
+      }))
+      continue
+    }
+
+    // ALL CAPS section header (e.g. WORK EXPERIENCE, EDUCATION)
+    const isCapsHeader = /^[A-Z][A-Z\s&/,\-]{3,}$/.test(trimmed) && trimmed.length < 60
+    if (isCapsHeader) {
+      paragraphs.push(new Paragraph({
+        spacing: { before: 200, after: 60 },
+        border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: 'AAAAAA' } },
+        children: [new TextRun({ text: trimmed, bold: true, size: 24, font: 'Calibri', allCaps: true })],
+      }))
+      continue
+    }
+
+    // Normal paragraph with inline markdown
+    paragraphs.push(new Paragraph({
+      spacing: { after: 60 },
+      children: parseInline(line),
+    }))
+  }
+
+  return paragraphs
+}
+
+async function downloadDocx(text, filename, isCV = false, userName = '') {
+  const paragraphs = markdownToParagraphs(text, isCV, userName)
+
+  // 2.5 cm margins = 1417 twips (1 cm ≈ 567 twips)
+  const margin = { top: 1417, right: 1417, bottom: 1417, left: 1417 }
+
+  const sections = [{
+    properties: { page: { margin } },
+    children: paragraphs,
+    ...(isCV ? {
+      footers: {
+        default: new Footer({
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [
+                new TextRun({ children: [PageNumber.CURRENT], size: 18, font: 'Calibri', color: '888888' }),
+              ],
+            }),
+          ],
+        }),
+      },
+    } : {}),
+  }]
+
+  const doc = new Document({ sections })
+  const blob = await Packer.toBlob(doc)
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+// ─── Sub-components ──────────────────────────────────────────────────────────
+function AlexBubble({ children }) {
+  return (
+    <div className="flex gap-3 items-start">
+      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-apex-blue to-apex-cyan flex items-center justify-center flex-shrink-0 shadow-sm mt-0.5">
+        <span className="text-white font-bold text-xs">A</span>
+      </div>
+      <div className="flex-1 bg-slate-100 rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-apex-text leading-relaxed">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function JobInfoCard({ job, onClear }) {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-5 mb-6 flex items-start justify-between gap-4">
+      <div className="min-w-0">
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-apex-blue bg-blue-50 px-2 py-0.5 rounded-full mb-2">
+          ✦ Selected job
+        </span>
+        <h2 className="font-semibold text-apex-text text-lg">{job.title}</h2>
+        <p className="text-sm text-apex-muted mt-0.5">
+          {[job.company, job.location, job.type, job.salary].filter(Boolean).join(' · ')}
+        </p>
+        {job.description && (
+          <p className="text-sm text-apex-muted mt-2 leading-relaxed line-clamp-2">{job.description}</p>
+        )}
+      </div>
+      <div className="flex flex-col gap-2 flex-shrink-0">
+        {job.url && (
+          <a href={job.url} target="_blank" rel="noopener noreferrer"
+            className="text-xs text-apex-muted border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors text-center">
+            View listing ↗
+          </a>
+        )}
+        <button onClick={onClear}
+          className="text-xs text-apex-muted border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors">
+          Change job
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function LoadingCard({ streamText }) {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      {/* Animated header */}
+      <div className="px-6 py-5 border-b border-slate-100">
+        <div className="flex items-center gap-3 mb-1">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-apex-blue to-apex-cyan flex items-center justify-center shadow-sm flex-shrink-0">
+            <span className="text-white font-bold text-xs">A</span>
+          </div>
+          <div>
+            <p className="font-semibold text-apex-text text-sm">Alex is tailoring your application…</p>
+            <p className="text-xs text-apex-muted">Analysing job description and reframing your CV</p>
+          </div>
+          <div className="ml-auto flex gap-1">
+            {[0, 150, 300].map((delay) => (
+              <span key={delay} className="w-2 h-2 bg-apex-blue rounded-full animate-bounce"
+                style={{ animationDelay: `${delay}ms` }} />
+            ))}
+          </div>
+        </div>
+        {/* Progress bar */}
+        <div className="mt-3 h-1 bg-slate-100 rounded-full overflow-hidden">
+          <div className="h-full bg-gradient-to-r from-apex-blue to-apex-cyan rounded-full animate-pulse" style={{ width: '60%' }} />
+        </div>
+      </div>
+
+      {/* Streaming preview */}
+      {streamText && (
+        <div className="max-h-64 overflow-y-auto p-5">
+          <pre className="whitespace-pre-wrap font-mono text-xs text-apex-muted leading-relaxed">{streamText}</pre>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function QuestionsPanel({ questions, answers, onChange, onRegenerate, loading }) {
+  return (
+    <div className="bg-white rounded-xl border border-amber-200 bg-amber-50/30 overflow-hidden mb-6">
+      <div className="px-6 py-4 border-b border-amber-100">
+        <h3 className="font-semibold text-apex-text text-sm flex items-center gap-2">
+          <span className="text-amber-500">💬</span>
+          Alex has a few questions to improve your tailoring
+        </h3>
+        <p className="text-xs text-apex-muted mt-0.5">Answer below to get a more personalised result</p>
+      </div>
+      <div className="p-6 space-y-5">
+        <AlexBubble>
+          <p className="mb-3 font-medium">To tailor your application even better, could you help me with the following?</p>
+          <div className="space-y-4">
+            {questions.map((q, i) => (
+              <div key={i}>
+                <p className="text-sm font-medium text-apex-text mb-1.5">{i + 1}. {q}</p>
+                <textarea
+                  value={answers[q] || ''}
+                  onChange={(e) => onChange(q, e.target.value)}
+                  placeholder="Your answer…"
+                  rows={2}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-apex-text placeholder-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-apex-blue focus:border-transparent resize-none"
+                />
+              </div>
+            ))}
+          </div>
+        </AlexBubble>
+        <button
+          onClick={onRegenerate}
+          disabled={loading}
+          className="w-full py-2.5 rounded-lg font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95 transition-opacity disabled:opacity-60 flex items-center justify-center gap-2 text-sm"
+        >
+          {loading && <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />}
+          ✦ Regenerate with my answers
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 export default function TailoringLab() {
-  const { user } = useUser()
+  const { user, session, addApplication } = useUser()
   const location = useLocation()
   const navigate = useNavigate()
+  const abortRef = useRef(null)
 
-  // Job pre-selected from Discover via navigate state
-  const incomingJob = location.state?.job ?? null
+  const job = location.state?.job ?? null
 
-  const [selectedJob, setSelectedJob] = useState(incomingJob)
+  const [phase, setPhase] = useState('idle')      // 'idle' | 'generating' | 'done' | 'error'
+  const [streamText, setStreamText] = useState('')
+  const [tailoredCV, setTailoredCV] = useState('')
+  const [coverLetter, setCoverLetter] = useState('')
+  const [questions, setQuestions] = useState([])
+  const [answers, setAnswers] = useState({})
   const [activeTab, setActiveTab] = useState('cv')
-  const [generated, setGenerated] = useState(null)
-  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [addedToTracker, setAddedToTracker] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+  const [sessionId, setSessionId] = useState(null)  // Supabase row id
 
-  const handleGenerate = () => {
-    if (!selectedJob) return
-    setLoading(true)
-    setGenerated(null)
-    setTimeout(() => {
-      setGenerated({
-        cv: generateCV(user, selectedJob),
-        cover: generateCoverLetter(user, selectedJob),
+  // ── Load saved answers + auto-generate on mount ───────────────────────────
+  useEffect(() => {
+    if (!job) return
+    let cancelled = false
+
+    const init = async () => {
+      let savedAnswers = {}
+
+      // Load existing Supabase session for this job
+      if (session?.user?.id) {
+        const { data } = await supabase
+          .from('tailoring_sessions')
+          .select('id, answers')
+          .eq('user_id', session.user.id)
+          .eq('job_id', String(job.id))
+          .maybeSingle()
+
+        if (data) {
+          setSessionId(data.id)
+          savedAnswers = data.answers || {}
+          setAnswers(savedAnswers)
+        }
+      }
+
+      if (!cancelled) await generate(savedAnswers)
+    }
+
+    init()
+    return () => {
+      cancelled = true
+      abortRef.current?.abort?.()
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Save answers to Supabase ──────────────────────────────────────────────
+  const persistAnswers = async (currentAnswers) => {
+    if (!session?.user?.id || !job?.id) return
+    const filled = Object.fromEntries(
+      Object.entries(currentAnswers).filter(([, v]) => v?.trim())
+    )
+    const payload = {
+      user_id:   session.user.id,
+      job_id:    String(job.id),
+      job_title: job.title,
+      company:   job.company,
+      questions: questions.join('\n'),
+      answers:   filled,
+      updated_at: new Date().toISOString(),
+    }
+    if (sessionId) {
+      const { data } = await supabase.from('tailoring_sessions').update(payload).eq('id', sessionId).select('id').single()
+      if (data) setSessionId(data.id)
+    } else {
+      const { data } = await supabase.from('tailoring_sessions').insert(payload).select('id').single()
+      if (data) setSessionId(data.id)
+    }
+  }
+
+  // ── Generate (streaming) ──────────────────────────────────────────────────
+  const generate = async (currentAnswers = answers) => {
+    setPhase('generating')
+    setStreamText('')
+    setError(null)
+
+    let fullText = ''
+    try {
+      const client = getClient()
+      const stream = client.messages.stream({
+        model: MODEL,
+        max_tokens: 4096,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: buildUserMessage(user, job, currentAnswers) }],
       })
-      setLoading(false)
-    }, 1400)
+      abortRef.current = stream
+
+      for await (const event of stream) {
+        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+          fullText += event.delta.text
+          setStreamText(fullText)
+        }
+      }
+
+      const parsed = parseResponse(fullText)
+      setTailoredCV(parsed.cv)
+      setCoverLetter(parsed.cover)
+      setQuestions(parsed.questions)
+      setPhase('done')
+    } catch (err) {
+      if (err.name === 'AbortError') return
+      console.error('[TailoringLab] API error:', err)
+      setError(err.message || 'An error occurred. Please try again.')
+      setPhase('error')
+    }
+  }
+
+  const handleRegenerate = async () => {
+    await persistAnswers(answers)
+    await generate(answers)
+  }
+
+  const handleAnswerChange = (question, value) => {
+    setAnswers((prev) => ({ ...prev, [question]: value }))
+  }
+
+  const handleDownload = async (type) => {
+    setDownloading(true)
+    try {
+      const text = type === 'cv' ? tailoredCV : coverLetter
+      const label = type === 'cv' ? 'CV' : 'Cover_Letter'
+      const company = job?.company?.replace(/\s+/g, '_') || 'Company'
+      await downloadDocx(text, `${label}_${company}.docx`, type === 'cv', user.name)
+    } catch (err) {
+      console.error('[TailoringLab] Download error:', err)
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  const handleAddToTracker = async () => {
+    if (!job) return
+    await addApplication(job, tailoredCV, coverLetter)
+    setAddedToTracker(true)
   }
 
   const handleClear = () => {
-    setSelectedJob(null)
-    setGenerated(null)
-    // Clear navigation state so Back doesn't re-inject the job
+    abortRef.current?.abort?.()
     navigate('/dashboard/tailoring-lab', { replace: true, state: {} })
   }
 
-  return (
-    <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-apex-text">Tailoring Lab</h1>
-        <p className="text-apex-muted mt-1">
-          Generate a tailored CV and cover letter for any job in seconds
-        </p>
-      </div>
-
-      {/* Job selection panel */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-        {selectedJob ? (
-          /* Pre-selected job info */
-          <div>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="inline-flex items-center gap-1 text-xs font-medium text-apex-blue bg-blue-50 px-2 py-0.5 rounded-full">
-                    ✦ Selected job
-                  </span>
-                </div>
-                <h2 className="text-lg font-semibold text-apex-text">{selectedJob.title}</h2>
-                <p className="text-sm text-apex-muted mt-0.5">
-                  {selectedJob.company}
-                  {selectedJob.location ? ` · ${selectedJob.location}` : ''}
-                  {selectedJob.type ? ` · ${selectedJob.type}` : ''}
-                  {selectedJob.salary ? ` · ${selectedJob.salary}` : ''}
-                </p>
-                {selectedJob.description && (
-                  <p className="text-sm text-apex-muted mt-3 leading-relaxed line-clamp-3">
-                    {selectedJob.description}
-                  </p>
-                )}
-              </div>
-              <button
-                onClick={handleClear}
-                className="text-xs text-apex-muted hover:text-apex-text border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors flex-shrink-0"
-              >
-                Change job
-              </button>
-            </div>
-
-            <div className="mt-5 flex gap-3">
-              <button
-                onClick={handleGenerate}
-                disabled={loading}
-                className="px-6 py-2.5 rounded-lg font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95 transition-opacity disabled:opacity-60 flex items-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                    </svg>
-                    Generating…
-                  </>
-                ) : (
-                  '✦ Generate tailored documents'
-                )}
-              </button>
-              {selectedJob.url && (
-                <a
-                  href={selectedJob.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-4 py-2.5 rounded-lg border border-slate-200 text-sm font-medium text-apex-text hover:bg-slate-50 transition-colors"
-                >
-                  View original listing ↗
-                </a>
-              )}
-            </div>
-          </div>
-        ) : (
-          /* No job selected — prompt to go to Discover */
-          <div className="text-center py-8">
-            <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-gradient-to-br from-apex-blue to-apex-cyan flex items-center justify-center">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-            <h3 className="text-base font-semibold text-apex-text mb-1">No job selected</h3>
-            <p className="text-sm text-apex-muted mb-5">
-              Go to Discover, find a job you like, and click{' '}
-              <span className="font-medium text-apex-blue">✦ Tailor Application</span>.
-            </p>
-            <button
-              onClick={() => navigate('/dashboard/discover')}
-              className="px-5 py-2.5 rounded-lg font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95 transition-opacity text-sm"
-            >
-              Browse jobs →
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Generated documents */}
-      {generated && (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          {/* Tabs */}
-          <div className="flex border-b border-slate-200">
-            {[
-              { key: 'cv', label: 'Tailored CV' },
-              { key: 'cover', label: 'Cover Letter' },
-            ].map(({ key, label }) => (
-              <button
-                key={key}
-                onClick={() => setActiveTab(key)}
-                className={`px-6 py-4 text-sm font-medium transition-colors ${
-                  activeTab === key
-                    ? 'text-apex-blue border-b-2 border-apex-blue'
-                    : 'text-apex-muted hover:text-apex-text'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <div className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-xs text-apex-muted flex items-center gap-1.5">
-                <span className="inline-block w-2 h-2 rounded-full bg-green-400" />
-                Tailored for {selectedJob.title} at {selectedJob.company}
-              </p>
-              <button
-                onClick={() =>
-                  navigator.clipboard?.writeText(activeTab === 'cv' ? generated.cv : generated.cover)
-                }
-                className="text-xs text-apex-blue hover:underline"
-              >
-                Copy to clipboard
-              </button>
-            </div>
-            <pre className="whitespace-pre-wrap font-mono text-sm text-apex-text leading-relaxed bg-slate-50 rounded-lg p-5 border border-slate-100 overflow-auto max-h-[540px]">
-              {activeTab === 'cv' ? generated.cv : generated.cover}
-            </pre>
-          </div>
+  // ── No job selected ───────────────────────────────────────────────────────
+  if (!job) {
+    return (
+      <div className="p-8">
+        <div className="mb-8">
+          <h1 className="text-2xl font-semibold text-apex-text">Tailoring Lab</h1>
+          <p className="text-apex-muted mt-1">AI-powered CV and cover letter tailored to each job</p>
         </div>
+        <div className="bg-white rounded-xl border border-slate-200 px-8 py-16 text-center">
+          <div className="w-14 h-14 mx-auto mb-5 rounded-xl bg-gradient-to-br from-apex-blue to-apex-cyan flex items-center justify-center shadow-sm">
+            <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-semibold text-apex-text mb-2">No job selected</h3>
+          <p className="text-sm text-apex-muted mb-6 max-w-sm mx-auto">
+            Browse jobs in Discover, then click{' '}
+            <span className="font-semibold text-apex-blue">✦ Tailor Application</span>{' '}
+            to generate your personalised CV and cover letter with AI.
+          </p>
+          <button onClick={() => navigate('/dashboard/discover')}
+            className="px-6 py-2.5 rounded-lg font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95 transition-opacity text-sm">
+            Browse jobs →
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Main layout ───────────────────────────────────────────────────────────
+  return (
+    <div className="p-8 max-w-4xl">
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-apex-text">Tailoring Lab</h1>
+        <p className="text-apex-muted mt-1">AI-powered CV and cover letter tailored to each job</p>
+      </div>
+
+      {/* Job info */}
+      <JobInfoCard job={job} onClear={handleClear} />
+
+      {/* ── Generating (loading + stream preview) ── */}
+      {phase === 'generating' && <LoadingCard streamText={streamText} />}
+
+      {/* ── Error ── */}
+      {phase === 'error' && (
+        <div className="bg-white rounded-xl border border-red-200 px-6 py-8 text-center">
+          <p className="text-red-500 text-sm mb-4">{error}</p>
+          <button onClick={() => generate()}
+            className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95">
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* ── Done ── */}
+      {phase === 'done' && (
+        <>
+          {/* Questions panel — shown BEFORE the CV tabs */}
+          {questions.length > 0 && (
+            <QuestionsPanel
+              questions={questions}
+              answers={answers}
+              onChange={handleAnswerChange}
+              onRegenerate={handleRegenerate}
+              loading={phase === 'generating'}
+            />
+          )}
+
+          {/* Results — CV and cover letter tabs */}
+          {(tailoredCV || coverLetter) && (
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              {/* Tab bar + actions */}
+              <div className="flex items-center border-b border-slate-200 px-2">
+                <div className="flex flex-1">
+                  {[
+                    { key: 'cv',    label: 'Tailored CV' },
+                    { key: 'cover', label: 'Cover Letter' },
+                  ].map(({ key, label }) => (
+                    <button key={key} onClick={() => setActiveTab(key)}
+                      className={`px-5 py-4 text-sm font-medium transition-colors ${
+                        activeTab === key
+                          ? 'text-apex-blue border-b-2 border-apex-blue'
+                          : 'text-apex-muted hover:text-apex-text'
+                      }`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex items-center gap-2 pr-2">
+                  <button
+                    onClick={handleAddToTracker}
+                    disabled={addedToTracker}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                      addedToTracker
+                        ? 'bg-green-50 text-green-700 border border-green-200 cursor-default'
+                        : 'border border-slate-200 text-apex-text hover:bg-slate-50'
+                    }`}>
+                    {addedToTracker ? '✓ In Tracker' : 'Add to Tracker'}
+                  </button>
+                  <button
+                    onClick={() => generate()}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-200 text-apex-text hover:bg-slate-50 transition-colors">
+                    ↺ Regenerate
+                  </button>
+                  <button
+                    onClick={() => handleDownload(activeTab)}
+                    disabled={downloading}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95 transition-opacity disabled:opacity-60 flex items-center gap-1.5">
+                    {downloading
+                      ? <div className="w-3 h-3 rounded-full border border-white/30 border-t-white animate-spin" />
+                      : <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                    }
+                    Download .docx
+                  </button>
+                </div>
+              </div>
+
+              {/* Status bar */}
+              <div className="flex items-center justify-between px-5 py-2 bg-slate-50 border-b border-slate-100">
+                <p className="text-xs text-apex-muted flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+                  Tailored for <span className="font-medium text-apex-text">{job.title}</span> at{' '}
+                  <span className="font-medium text-apex-text">{job.company}</span>
+                </p>
+                <button
+                  onClick={() => {
+                    const text = activeTab === 'cv' ? tailoredCV : coverLetter
+                    navigator.clipboard?.writeText(text)
+                  }}
+                  className="text-xs text-apex-blue hover:underline">
+                  Copy to clipboard
+                </button>
+              </div>
+
+              {/* Editable text area */}
+              <div className="p-5">
+                <textarea
+                  value={activeTab === 'cv' ? tailoredCV : coverLetter}
+                  onChange={(e) => activeTab === 'cv'
+                    ? setTailoredCV(e.target.value)
+                    : setCoverLetter(e.target.value)
+                  }
+                  spellCheck={false}
+                  className="w-full min-h-[520px] font-mono text-sm text-apex-text leading-relaxed bg-slate-50 rounded-lg p-5 border border-slate-100 focus:outline-none focus:ring-2 focus:ring-apex-blue/30 focus:border-apex-blue resize-y"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* If only questions, no CV yet — prompt to answer then generate */}
+          {!tailoredCV && !coverLetter && questions.length > 0 && (
+            <div className="text-center py-4 text-sm text-apex-muted">
+              Answer Alex&apos;s questions above and click <strong>Regenerate</strong> to get your tailored documents.
+            </div>
+          )}
+        </>
       )}
     </div>
   )

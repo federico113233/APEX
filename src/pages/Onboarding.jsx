@@ -30,21 +30,26 @@ const TOTAL = STEPS.length
 function StepIndicator({ step }) {
   return (
     <div className="mb-8">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-medium text-apex-muted">
-          Step {step} of {TOTAL}
-        </span>
-        <span className="text-sm text-apex-muted">{STEPS[step - 1].label}</span>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <span
+            className="w-6 h-6 rounded-full text-xs font-bold text-white flex items-center justify-center"
+            style={{ background: 'linear-gradient(135deg, #2563EB, #38BDF8)' }}
+          >
+            {step}
+          </span>
+          <span className="text-sm font-semibold text-slate-700">{STEPS[step - 1].label}</span>
+        </div>
+        <span className="text-xs text-slate-400 font-medium">{step} of {TOTAL}</span>
       </div>
       <div className="flex gap-1.5">
         {STEPS.map(({ n }) => (
           <div
             key={n}
-            className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
-              n <= step
-                ? 'bg-gradient-to-r from-apex-blue to-apex-cyan'
-                : 'bg-slate-200'
+            className={`h-1 flex-1 rounded-full transition-all duration-300 ${
+              n < step ? 'bg-blue-500' : n === step ? 'bg-blue-400' : 'bg-slate-200'
             }`}
+            style={n <= step ? { background: 'linear-gradient(90deg, #2563EB, #38BDF8)' } : {}}
           />
         ))}
       </div>
@@ -155,16 +160,16 @@ export default function Onboarding() {
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }))
 
   const inputCls =
-    'w-full px-4 py-2.5 rounded-lg border border-slate-200 text-apex-text placeholder-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-apex-blue focus:border-transparent'
+    'w-full px-4 py-2.5 rounded-lg border border-slate-200 text-slate-900 placeholder-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow text-sm'
 
-  const handleFinish = () => {
-    updateProfile({
+  const handleFinish = async () => {
+    await updateProfile({
       name:           form.name,
       country:        form.country,
       city:           form.city,
       linkedinUrl:    form.linkedinUrl,
       sectors:        form.sectors,
-      sector:         form.sectors[0] || '',   // legacy field used by Discover
+      sector:         form.sectors[0] || '',
       contractType:   form.contractType,
       workMode:       form.workMode,
       salaryCurrency: form.salaryCurrency,
@@ -212,11 +217,11 @@ export default function Onboarding() {
               className={inputCls}
             />
           </Field>
-          <Field label="City" hint="(optional — improves job search)">
+          <Field label="City" hint="(optional — write in English)">
             <input
               value={form.city}
               onChange={(e) => set('city', e.target.value)}
-              placeholder="e.g. Milan"
+              placeholder="e.g. Milan, Rome, Turin"
               className={inputCls}
             />
           </Field>
@@ -338,10 +343,10 @@ export default function Onboarding() {
   }
 
   return (
-    <div className="min-h-screen bg-apex-bg flex flex-col">
-      <header className="p-6">
-        <Link to="/" className="inline-block">
-          <Logo size="lg" />
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      <header className="px-6 py-5">
+        <Link to="/">
+          <img src="/apex_full_logo.png" alt="APEX" className="h-8 w-auto object-contain" />
         </Link>
       </header>
 
@@ -349,7 +354,7 @@ export default function Onboarding() {
         <div className="w-full max-w-lg">
           <StepIndicator step={step} />
 
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8">
             {steps[step]}
 
             {/* Navigation */}
@@ -358,7 +363,7 @@ export default function Onboarding() {
                 <button
                   type="button"
                   onClick={() => setStep((s) => s - 1)}
-                  className="px-5 py-3 rounded-lg border border-slate-200 font-medium text-apex-text hover:bg-slate-50 transition-colors"
+                  className="px-5 py-3 rounded-lg border border-slate-200 font-semibold text-slate-600 hover:bg-slate-50 transition-colors text-sm"
                 >
                   ← Back
                 </button>
@@ -369,7 +374,8 @@ export default function Onboarding() {
                   type="button"
                   disabled={!canContinue[step]}
                   onClick={() => setStep((s) => s + 1)}
-                  className="flex-1 py-3 rounded-lg font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95 transition-opacity disabled:opacity-40"
+                  className="flex-1 py-3 rounded-lg font-semibold text-white text-sm hover:opacity-90 transition-opacity disabled:opacity-40 shadow-md shadow-blue-500/20"
+                  style={{ background: 'linear-gradient(135deg, #2563EB, #38BDF8)' }}
                 >
                   Continue →
                 </button>
@@ -378,7 +384,8 @@ export default function Onboarding() {
                   type="button"
                   disabled={!canContinue[4]}
                   onClick={handleFinish}
-                  className="flex-1 py-3 rounded-lg font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95 transition-opacity disabled:opacity-40"
+                  className="flex-1 py-3 rounded-lg font-semibold text-white text-sm hover:opacity-90 transition-opacity disabled:opacity-40 shadow-md shadow-blue-500/20"
+                  style={{ background: 'linear-gradient(135deg, #2563EB, #38BDF8)' }}
                 >
                   Enter APEX →
                 </button>
@@ -390,10 +397,9 @@ export default function Onboarding() {
               <p className="text-center mt-3">
                 <button
                   type="button"
-                  onClick={() => {
-                    // allow skip but mark onboarded with empty CV
+                  onClick={async () => {
                     set('cvText', ' ')
-                    setTimeout(handleFinish, 0)
+                    await handleFinish()
                   }}
                   className="text-sm text-apex-muted hover:text-apex-text underline underline-offset-2"
                 >
@@ -404,6 +410,10 @@ export default function Onboarding() {
           </div>
         </div>
       </main>
+
+      <footer className="flex justify-center pb-8 pt-4">
+        <img src="/apex_x_blue.png" alt="" aria-hidden="true" className="w-5 h-5 object-contain" style={{ opacity: 0.35 }} />
+      </footer>
     </div>
   )
 }

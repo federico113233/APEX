@@ -2,15 +2,15 @@
 
 @theme {
   /* APEX Brand Colors */
-  --color-apex-blue: #2563EB;
-  --color-apex-cyan: #38BDF8;
-  --color-apex-bg: #F8FAFC;
-  --color-apex-text: #0F172A;
-  --color-apex-muted: #64748B;
-  
-  /* Extend palette for gradients */
-  --color-primary: var(--color-apex-blue);
-  --color-accent: var(--color-apex-cyan);
+  --color-apex-blue:   #2563EB;
+  --color-apex-cyan:   #38BDF8;
+  --color-apex-bg:     #F8FAFC;
+  --color-apex-text:   #0F172A;
+  --color-apex-muted:  #475569;
+  --color-apex-border: #E2E8F0;
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 * {
@@ -22,7 +22,35 @@ body {
   min-height: 100vh;
   background-color: #F8FAFC;
   color: #0F172A;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+}
+
+/* ── Splash screen animations ─────────────────────────────────────────────── */
+@keyframes splashLogoIn {
+  from { opacity: 0; transform: scale(0.8); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes splashLogoPulse {
+  0%, 100% { filter: brightness(1) drop-shadow(0 0 0px rgba(37, 99, 235, 0)); }
+  50%      { filter: brightness(1.25) drop-shadow(0 0 24px rgba(37, 99, 235, 0.45)); }
+}
+
+.splash-logo-anim {
+  animation:
+    splashLogoIn 0.65s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+    splashLogoPulse 1.4s ease-in-out 0.65s infinite;
+}
+
+/* ── Smooth page transitions ──────────────────────────────────────────────── */
+.page-fade-in {
+  animation: pageFadeIn 0.25s ease both;
+}
+
+@keyframes pageFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }

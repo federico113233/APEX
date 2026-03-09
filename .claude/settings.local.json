@@ -6,7 +6,9 @@
       "Skill(claude-api)",
       "Bash(npm install:*)",
       "Bash(\"C:/Users/feder/Desktop/APEX/.env.example\":*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

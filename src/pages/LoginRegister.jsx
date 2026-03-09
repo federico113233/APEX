@@ -25,7 +25,7 @@ export default function LoginRegister() {
     setLoadingGoogle(true)
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin },
+      options: { redirectTo: window.location.origin + '/dashboard' },
     })
     if (error) { setError(error.message); setLoadingGoogle(false) }
   }
@@ -37,7 +37,7 @@ export default function LoginRegister() {
     setLoadingMagic(true)
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      options: { emailRedirectTo: window.location.origin },
+      options: { emailRedirectTo: window.location.origin + '/dashboard' },
     })
     setLoadingMagic(false)
     if (error) setError(error.message)

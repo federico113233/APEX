@@ -357,19 +357,21 @@ export default function Discover() {
       const what  = (kw.trim() || sectorKw).trim()
       const where = buildWhere(f.where)
 
-      let query = `app_id=${APP_ID}&app_key=${APP_KEY}&results_per_page=20`
-      if (what)        query += `&what=${encodeURIComponent(what)}`
-      if (where)       query += `&where=${encodeURIComponent(where)}`
-      if (f.salaryMin) query += `&salary_min=${encodeURIComponent(f.salaryMin)}`
-      if (f.salaryMax) query += `&salary_max=${encodeURIComponent(f.salaryMax)}`
+      const params = new URLSearchParams({
+        country: f.countryCode,
+        app_id: APP_ID,
+        app_key: APP_KEY,
+        results_per_page: 20,
+      })
+      if (what)        params.set('what', what)
+      if (where)       params.set('where', where)
+      if (f.salaryMin) params.set('salary_min', f.salaryMin)
+      if (f.salaryMax) params.set('salary_max', f.salaryMax)
 
-      const url = `/api/adzuna/v1/api/jobs/${f.countryCode}/search/1?${query}`
+      const url = `/api/adzuna?${params.toString()}`
       console.log('[Adzuna] GET', url.replace(APP_KEY, '***'))
 
-      const res = await fetch(url, {
-        signal: controller.signal,
-        headers: { 'Content-Type': 'application/json' },
-      })
+      const res = await fetch(url, { signal: controller.signal })
       if (!res.ok) {
         const body = await res.text().catch(() => '')
         console.error('[Adzuna] Error', res.status, body)

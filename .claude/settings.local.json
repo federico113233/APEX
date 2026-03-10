@@ -8,7 +8,8 @@
       "Bash(\"C:/Users/feder/Desktop/APEX/.env.example\":*)",
       "Bash(node:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(find /c/Users/feder/Desktop/APEX/src -type f \\\\\\( -name \"*.js\" -o -name \"*.jsx\" \\\\\\) | xargs grep -l \"supabase\" 2>/dev/null)"
     ]
   }
 }

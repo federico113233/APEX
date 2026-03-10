@@ -64,7 +64,7 @@ function Dashboard() {
   ]
 
   return (
-    <div className="p-8 max-w-5xl page-fade-in">
+    <div className="p-4 md:p-8 max-w-5xl page-fade-in">
       {/* Greeting */}
       <div className="mb-10">
         <h1 className="text-2xl font-bold text-slate-900">

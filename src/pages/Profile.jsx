@@ -141,7 +141,7 @@ export default function Profile() {
     'w-full px-4 py-2.5 rounded-lg border border-slate-200 text-slate-900 placeholder-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow text-sm'
 
   return (
-    <div className="p-8 max-w-2xl page-fade-in">
+    <div className="p-4 md:p-8 max-w-2xl page-fade-in">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-slate-900">Profile</h1>
         <p className="text-slate-500 mt-1 text-sm">

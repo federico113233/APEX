@@ -1,8 +1,7 @@
 export default async function handler(req, res) {
-  const { country, ...params } = req.query
-  const countryCode = country || 'it'
-  const queryString = new URLSearchParams(params).toString()
-  const url = `https://api.adzuna.com/v1/api/jobs/${countryCode}/search/1?${queryString}`
+  // req.url: /api/adzuna/v1/api/jobs/{country}/search/1?params
+  const path = req.url.replace(/^\/api\/adzuna/, '')
+  const url = `https://api.adzuna.com${path}`
 
   try {
     const response = await fetch(url)

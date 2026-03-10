@@ -20,7 +20,6 @@ const DEFAULT_USER = {
   onboarded: false,
 }
 
-// Supabase row → local user object
 function rowToUser(row) {
   return {
     name:           row.name            || '',
@@ -40,7 +39,6 @@ function rowToUser(row) {
   }
 }
 
-// Local user object → Supabase row
 function userToRow(userId, data) {
   return {
     id:              userId,
@@ -62,7 +60,6 @@ function userToRow(userId, data) {
   }
 }
 
-// Supabase applications row → local app object
 function rowToApp(row) {
   return {
     id:           row.id,
@@ -74,11 +71,11 @@ function rowToApp(row) {
     tailoredCv:   row.tailored_cv || '',
     coverLetter:  row.cover_letter || '',
     notes:        row.notes       || '',
+    matchScore:   row.match_score  || 0,
     appliedDate:  new Date(row.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
   }
 }
 
-// localStorage key for onboarded cache
 const onboardedKey = (uid) => `apex_onboarded_${uid}`
 
 export function UserProvider({ children }) {
@@ -87,15 +84,14 @@ export function UserProvider({ children }) {
   const [user, setUser]                     = useState(DEFAULT_USER)
   const [profileLoaded, setProfileLoaded]   = useState(false)
   const [applications, setApplications]     = useState([])
+  const [drafts, setDrafts]                 = useState([])
 
-  // ── Pre-seed onboarded from localStorage (instant, no network) ───────────
   const seedOnboardedFromCache = (userId) => {
     if (localStorage.getItem(onboardedKey(userId)) === '1') {
       setUser((u) => ({ ...u, onboarded: true }))
     }
   }
 
-  // ── Load profile from Supabase ────────────────────────────────────────────
   const loadProfile = async (userId) => {
     const { data, error } = await supabase
       .from('profiles')
@@ -115,7 +111,6 @@ export function UserProvider({ children }) {
     setProfileLoaded(true)
   }
 
-  // ── Load applications from Supabase ───────────────────────────────────────
   const loadApplications = async (userId) => {
     const { data, error } = await supabase
       .from('applications')
@@ -123,33 +118,34 @@ export function UserProvider({ children }) {
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
 
-    if (error) {
-      console.error('[Supabase] loadApplications error:', error)
-      return
-    }
+    if (error) { console.error('[Supabase] loadApplications error:', error); return }
     if (data) setApplications(data.map(rowToApp))
   }
 
-  // ── Auth state listener ───────────────────────────────────────────────────
+  const loadDrafts = async (userId) => {
+    const { data, error } = await supabase
+      .from('drafts')
+      .select('*')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
+
+    if (error) { console.error('[Supabase] loadDrafts error:', error); return }
+    if (data) setDrafts(data)
+  }
+
   useEffect(() => {
     let resolved = false
 
     const resolve = () => {
-      if (!resolved) {
-        resolved = true
-        setSessionLoading(false)
-      }
+      if (!resolved) { resolved = true; setSessionLoading(false) }
     }
 
-    // Safety timeout — 8 s
     const safetyTimer = setTimeout(() => {
-      console.warn('[Auth] Safety timeout (8 s) fired — forcing sessionLoading → false')
+      console.warn('[Auth] Safety timeout (8 s) fired')
       setProfileLoaded(true)
       resolve()
     }, 8000)
 
-    // 1. Check for an existing session on page load — resolve UI immediately,
-    //    then load profile + applications in background.
     supabase.auth.getSession().then(({ data: { session }, error }) => {
       console.log('[Auth] getSession →', session ? `user ${session.user.id}` : 'no session',
         error ? `| error: ${error.message}` : '')
@@ -161,6 +157,7 @@ export function UserProvider({ children }) {
         Promise.all([
           loadProfile(session.user.id),
           loadApplications(session.user.id),
+          loadDrafts(session.user.id),
         ]).catch((err) => console.error('[Auth] background load error:', err))
       } else {
         setProfileLoaded(true)
@@ -175,7 +172,6 @@ export function UserProvider({ children }) {
       resolve()
     })
 
-    // 2. Keep session in sync on SIGNED_IN / SIGNED_OUT / TOKEN_REFRESHED
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         console.log('[Auth] onAuthStateChange →', event,
@@ -191,6 +187,7 @@ export function UserProvider({ children }) {
             Promise.all([
               loadProfile(session.user.id),
               loadApplications(session.user.id),
+              loadDrafts(session.user.id),
             ])
               .catch((err) => console.error('[Auth] SIGNED_IN load error:', err))
               .finally(() => { clearTimeout(safetyTimer); resolve() })
@@ -202,19 +199,16 @@ export function UserProvider({ children }) {
           setUser(DEFAULT_USER)
           setProfileLoaded(false)
           setApplications([])
+          setDrafts([])
           clearTimeout(safetyTimer)
           resolve()
         }
       }
     )
 
-    return () => {
-      clearTimeout(safetyTimer)
-      subscription.unsubscribe()
-    }
+    return () => { clearTimeout(safetyTimer); subscription.unsubscribe() }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── updateProfile ─────────────────────────────────────────────────────────
   const updateProfile = async (data) => {
     const merged = { ...user, ...data }
     setUser(merged)
@@ -231,9 +225,7 @@ export function UserProvider({ children }) {
     if (error) console.error('[Supabase] updateProfile error:', error)
   }
 
-  // ── addApplication ────────────────────────────────────────────────────────
-  const addApplication = async (job, tailoredCv = '', coverLetter = '') => {
-    // Deduplicate
+  const addApplication = async (job, tailoredCv = '', coverLetter = '', matchScore = 0) => {
     const jobIdStr = String(job.id)
     if (applications.find((a) => a.jobId === jobIdStr)) return
 
@@ -251,6 +243,7 @@ export function UserProvider({ children }) {
           location:     job.location || '',
           tailored_cv:  tailoredCv,
           cover_letter: coverLetter,
+          match_score:  matchScore   || 0,
           status:       'Applied',
           notes:        '',
         })
@@ -259,12 +252,11 @@ export function UserProvider({ children }) {
 
       if (error) {
         console.error('[Supabase] addApplication error:', error)
-        // Fallback to in-memory
         setApplications((prev) => [{
           id: jobIdStr, jobId: jobIdStr,
           title: job.title || '', company: job.company || '',
           location: job.location || '', status: 'Applied',
-          tailoredCv, coverLetter, notes: '', appliedDate,
+          tailoredCv, coverLetter, notes: '', matchScore: matchScore || 0, appliedDate,
         }, ...prev])
       } else {
         setApplications((prev) => [rowToApp(data), ...prev])
@@ -274,12 +266,11 @@ export function UserProvider({ children }) {
         id: jobIdStr, jobId: jobIdStr,
         title: job.title || '', company: job.company || '',
         location: job.location || '', status: 'Applied',
-        tailoredCv, coverLetter, notes: '', appliedDate,
+        tailoredCv, coverLetter, notes: '', matchScore: matchScore || 0, appliedDate,
       }, ...prev])
     }
   }
 
-  // ── updateStatus ──────────────────────────────────────────────────────────
   const updateStatus = async (appId, status) => {
     setApplications((prev) => prev.map((a) => a.id === appId ? { ...a, status } : a))
     const { error } = await supabase
@@ -289,7 +280,6 @@ export function UserProvider({ children }) {
     if (error) console.error('[Supabase] updateStatus error:', error)
   }
 
-  // ── updateApplicationNotes ────────────────────────────────────────────────
   const updateApplicationNotes = async (appId, notes) => {
     setApplications((prev) => prev.map((a) => a.id === appId ? { ...a, notes } : a))
     const { error } = await supabase
@@ -299,7 +289,6 @@ export function UserProvider({ children }) {
     if (error) console.error('[Supabase] updateApplicationNotes error:', error)
   }
 
-  // ── deleteApplication ─────────────────────────────────────────────────────
   const deleteApplication = async (appId) => {
     setApplications((prev) => prev.filter((a) => a.id !== appId))
     const { error } = await supabase
@@ -309,21 +298,49 @@ export function UserProvider({ children }) {
     if (error) console.error('[Supabase] deleteApplication error:', error)
   }
 
-  // supabase.auth.signOut() handles clearing the auth token from localStorage
+  // ── Draft operations ────────────────────────────────────────────────────────
+  const saveDraft = async (draftData) => {
+    const userId = session?.user?.id
+    if (!userId || !draftData.job_id) return null
+
+    const payload = {
+      user_id: userId,
+      ...draftData,
+      updated_at: new Date().toISOString(),
+    }
+
+    const { data, error } = await supabase
+      .from('drafts')
+      .upsert(payload, { onConflict: 'user_id,job_id' })
+      .select()
+      .single()
+
+    if (error) { console.error('[Supabase] saveDraft error:', error); return null }
+
+    if (data) {
+      setDrafts((prev) => {
+        const idx = prev.findIndex((d) => d.user_id === userId && d.job_id === draftData.job_id)
+        if (idx >= 0) { const next = [...prev]; next[idx] = data; return next }
+        return [data, ...prev]
+      })
+    }
+    return data
+  }
+
+  const deleteDraft = async (draftId) => {
+    setDrafts((prev) => prev.filter((d) => d.id !== draftId))
+    const { error } = await supabase.from('drafts').delete().eq('id', draftId)
+    if (error) console.error('[Supabase] deleteDraft error:', error)
+  }
+
   const signOut = () => supabase.auth.signOut()
 
   return (
     <UserContext.Provider value={{
-      session,
-      sessionLoading,
-      user,
-      profileLoaded,
-      updateProfile,
-      applications,
-      addApplication,
-      updateStatus,
-      updateApplicationNotes,
-      deleteApplication,
+      session, sessionLoading,
+      user, profileLoaded, updateProfile,
+      applications, addApplication, updateStatus, updateApplicationNotes, deleteApplication,
+      drafts, saveDraft, deleteDraft,
       signOut,
     }}>
       {children}

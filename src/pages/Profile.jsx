@@ -135,11 +135,46 @@ function LanguagesEditor({ value, onChange }) {
 
 function Modal({ title, onClose, onSave, saving, saved, children }) {
   const [visible, setVisible] = useState(false)
-  useEffect(() => { requestAnimationFrame(() => setVisible(true)) }, [])
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
+
+  useEffect(() => {
+    requestAnimationFrame(() => setVisible(true))
+    const handler = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
 
   const close = () => {
     setVisible(false)
     setTimeout(onClose, 200)
+  }
+
+  const panelStyle = isMobile ? {
+    position: 'fixed',
+    inset: 0,
+    zIndex: 201,
+    background: '#fff',
+    borderRadius: 0,
+    padding: '24px 20px 28px',
+    boxSizing: 'border-box',
+    overflowY: 'auto',
+    transform: visible ? 'translateY(0)' : 'translateY(30px)',
+    opacity: visible ? 1 : 0,
+    transition: 'transform 0.25s cubic-bezier(0.34,1.4,0.64,1), opacity 0.2s',
+  } : {
+    position: 'fixed',
+    top: '50%', left: '50%',
+    transform: visible ? 'translate(-50%,-50%) scale(1)' : 'translate(-50%,-50%) scale(0.97)',
+    opacity: visible ? 1 : 0,
+    transition: 'transform 0.2s cubic-bezier(0.34,1.4,0.64,1), opacity 0.18s',
+    zIndex: 201,
+    width: '100%', maxWidth: 560,
+    background: '#fff',
+    borderRadius: 18,
+    boxShadow: '0 24px 64px rgba(15,23,42,0.2), 0 0 0 1px rgba(15,23,42,0.06)',
+    padding: '32px 32px 28px',
+    boxSizing: 'border-box',
+    maxHeight: '90vh', overflowY: 'auto',
   }
 
   return (
@@ -156,22 +191,7 @@ function Modal({ title, onClose, onSave, saving, saved, children }) {
       />
 
       {/* Panel */}
-      <div
-        style={{
-          position: 'fixed',
-          top: '50%', left: '50%',
-          transform: visible ? 'translate(-50%,-50%) scale(1)' : 'translate(-50%,-50%) scale(0.97)',
-          opacity: visible ? 1 : 0,
-          transition: 'transform 0.2s cubic-bezier(0.34,1.4,0.64,1), opacity 0.18s',
-          zIndex: 201,
-          width: '100%', maxWidth: 560,
-          background: '#fff',
-          borderRadius: 18,
-          boxShadow: '0 24px 64px rgba(15,23,42,0.2), 0 0 0 1px rgba(15,23,42,0.06)',
-          padding: '32px 32px 28px',
-          boxSizing: 'border-box',
-          maxHeight: '90vh', overflowY: 'auto',
-        }}
+      <div style={panelStyle}
       >
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
@@ -464,7 +484,7 @@ function SummaryCard({ icon, title, subtitle, badge, onClick }) {
 
       {/* Badge */}
       {badge && (
-        <div>
+        <div style={{ minWidth: 0, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
           {badge}
         </div>
       )}
@@ -477,6 +497,13 @@ function SummaryCard({ icon, title, subtitle, badge, onClick }) {
 export default function Profile() {
   const { user } = useUser()
   const [openModal, setOpenModal] = useState(null)
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
 
   const cvText   = user.cvText || ''
   const langCount = (user.languages || []).filter((l) => l.lang?.trim()).length
@@ -485,7 +512,7 @@ export default function Profile() {
     <>
       <style>{`@keyframes modal-spin { to { transform: rotate(360deg) } }`}</style>
 
-      <div style={{ background: '#F8FAFC', minHeight: '100vh', padding: '40px 32px', boxSizing: 'border-box' }}>
+      <div style={{ background: '#F8FAFC', minHeight: '100vh', padding: isMobile ? '24px 16px' : '40px 32px', boxSizing: 'border-box' }}>
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
 
           {/* Header */}

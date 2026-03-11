@@ -94,6 +94,13 @@ export default function Dashboard() {
   const { user, applications, drafts } = useUser()
   const navigate = useNavigate()
 
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
+
   const hour       = new Date().getHours()
   const greeting   = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
   const firstName  = user.name?.split(' ')[0] || ''
@@ -140,7 +147,7 @@ export default function Dashboard() {
         <div style={{
           background: '#0F172A',
           borderRadius: '0 0 28px 28px',
-          padding: '44px 40px 80px',
+          padding: isMobile ? '28px 16px 60px' : '44px 40px 80px',
           position: 'relative',
           overflow: 'hidden',
         }}>
@@ -166,7 +173,7 @@ export default function Dashboard() {
           <div style={{ position: 'relative', maxWidth: 1100, margin: '0 auto', ...fadeStyle(0) }}>
             <h1 style={{
               margin: 0,
-              fontSize: 36,
+              fontSize: isMobile ? 28 : 36,
               fontWeight: 700,
               color: '#fff',
               letterSpacing: '-0.03em',
@@ -197,14 +204,14 @@ export default function Dashboard() {
         <div style={{
           maxWidth: 1100,
           margin: '-40px auto 0',
-          padding: '0 32px 48px',
+          padding: isMobile ? '0 16px 48px' : '0 32px 48px',
           position: 'relative',
           zIndex: 10,
         }}>
-          <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 20, alignItems: 'flex-start' }}>
 
             {/* ── LEFT COLUMN (58%) ── */}
-            <div style={{ flex: '0 0 58%', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ flex: isMobile ? 'none' : '0 0 58%', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
               {/* Alex Card */}
               <div
@@ -310,7 +317,7 @@ export default function Dashboard() {
                 }}>
                   Quick actions
                 </p>
-                <div style={{ display: 'flex', gap: 10 }}>
+                <div style={isMobile ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } : { display: 'flex', gap: 10 }}>
                   {QUICK_ACTIONS.map(qa => (
                     <QuickActionCard key={qa.to} {...qa} />
                   ))}
@@ -319,7 +326,7 @@ export default function Dashboard() {
             </div>
 
             {/* ── RIGHT COLUMN (42%) ── */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ flex: isMobile ? 'none' : 1, display: 'flex', flexDirection: 'column', gap: 16 }}>
 
               {/* Applications */}
               <div style={{

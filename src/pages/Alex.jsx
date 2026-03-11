@@ -315,7 +315,7 @@ function SendButton({ onClick, enabled }) {
   )
 }
 
-function SuggestionPill({ label, onClick }) {
+function SuggestionPill({ label, onClick, mobile }) {
   const [hov, setHov] = useState(false)
   return (
     <button
@@ -323,13 +323,17 @@ function SuggestionPill({ label, onClick }) {
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        padding: '10px 18px', background: '#fff',
+        padding: mobile ? '12px 16px' : '10px 18px',
+        width: mobile ? '100%' : undefined,
+        textAlign: mobile ? 'left' : undefined,
+        background: '#fff',
         border: `1.5px solid ${hov ? '#2563EB' : '#E2E8F0'}`,
-        borderRadius: 20, fontSize: 14,
+        borderRadius: 20, fontSize: mobile ? 13 : 14,
         color: hov ? '#2563EB' : '#475569',
         cursor: 'pointer', transition: 'all 0.15s',
         fontFamily: 'inherit', fontWeight: 500,
         boxShadow: hov ? '0 2px 8px rgba(37,99,235,0.1)' : 'none',
+        minHeight: 44,
       }}
     >
       {label}
@@ -386,6 +390,15 @@ export default function Alex() {
     () => DYNAMIC_PHRASES[Math.floor(Math.random() * DYNAMIC_PHRASES.length)],
     [] // eslint-disable-line react-hooks/exhaustive-deps
   )
+
+  // Mobile detection
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
 
   // Chat state
   const [messages, setMessages]       = useState([])
@@ -557,20 +570,99 @@ export default function Alex() {
         .alex-msgs::-webkit-scrollbar { width: 0; }
       `}</style>
 
-      {/* Full-viewport layout */}
-      <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      {/* ── Mobile drawer backdrop + panel ── */}
+      {isMobile && drawerOpen && (
+        <>
+          <div
+            onClick={() => setDrawerOpen(false)}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 99,
+              background: 'rgba(15,23,42,0.4)',
+            }}
+          />
+          <div style={{
+            position: 'fixed',
+            top: 56, left: 0, bottom: 64,
+            width: 280,
+            zIndex: 100,
+            display: 'flex', flexDirection: 'column',
+            background: '#fff',
+            borderRight: '1px solid #E2E8F0',
+            overflowY: 'auto',
+          }}>
+            <AlexSidebar
+              conversations={conversations}
+              activeId={activeConvId}
+              onNew={() => { handleNew(); setDrawerOpen(false) }}
+              onSelect={(conv) => { handleSelectConversation(conv); setDrawerOpen(false) }}
+            />
+          </div>
+        </>
+      )}
 
-        {/* ── Alex sidebar ── */}
-        <AlexSidebar
-          conversations={conversations}
-          activeId={activeConvId}
-          onNew={handleNew}
-          onSelect={handleSelectConversation}
-        />
+      {/* Full-viewport layout */}
+      <div style={{
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        height: isMobile ? 'calc(100vh - 120px)' : '100vh',
+        overflow: 'hidden',
+      }}>
+
+        {/* ── Desktop sidebar ── */}
+        {!isMobile && (
+          <AlexSidebar
+            conversations={conversations}
+            activeId={activeConvId}
+            onNew={handleNew}
+            onSelect={handleSelectConversation}
+          />
+        )}
+
+        {/* ── Mobile sub-header ── */}
+        {isMobile && (
+          <div style={{
+            flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '10px 16px',
+            background: '#fff',
+            borderBottom: '1px solid #E2E8F0',
+          }}>
+            <button
+              onClick={() => setDrawerOpen(true)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '8px 12px', borderRadius: 8,
+                border: '1.5px solid #E2E8F0', background: '#fff',
+                color: '#0F172A', fontSize: 13, fontWeight: 600,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Chats
+            </button>
+            <button
+              onClick={handleNew}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '8px 12px', borderRadius: 8,
+                border: 'none', background: '#2563EB',
+                color: '#fff', fontSize: 13, fontWeight: 600,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+              </svg>
+              New
+            </button>
+          </div>
+        )}
 
         {/* ── Chat area ── */}
         <div style={{
-          flex: 1, display: 'flex', flexDirection: 'column',
+          flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
           background: '#F8FAFC', overflow: 'hidden', position: 'relative',
         }}>
 
@@ -579,7 +671,7 @@ export default function Alex() {
             style={{
               position: 'absolute', inset: 0, zIndex: 2,
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              padding: '0 48px 64px',
+              padding: isMobile ? '0 20px 40px' : '0 48px 64px',
               background: '#F8FAFC',
               opacity: hasStarted ? 0 : 1,
               pointerEvents: hasStarted ? 'none' : 'auto',
@@ -589,14 +681,16 @@ export default function Alex() {
             <div style={{ width: '100%', maxWidth: 680, textAlign: 'center' }}>
 
               <h1 style={{
-                margin: 0, fontSize: 40, fontWeight: 700, color: '#0F172A',
+                margin: 0,
+                fontSize: isMobile ? 28 : 40,
+                fontWeight: 700, color: '#0F172A',
                 letterSpacing: '-0.04em', lineHeight: 1.1,
               }}>
                 Hi {firstName}, I&apos;m Alex.
               </h1>
               <p style={{
-                margin: '12px 0 40px',
-                fontSize: 18, color: '#64748B',
+                margin: isMobile ? '10px 0 28px' : '12px 0 40px',
+                fontSize: isMobile ? 15 : 18, color: '#64748B',
                 fontStyle: 'italic', lineHeight: 1.5,
               }}>
                 {phrase}
@@ -608,9 +702,16 @@ export default function Alex() {
                 placeholder="Ask Alex anything about your career..."
               />
 
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 18, justifyContent: 'center' }}>
+              <div style={{
+                display: 'flex',
+                flexDirection: isMobile ? 'column' : 'row',
+                flexWrap: isMobile ? undefined : 'wrap',
+                gap: 8,
+                marginTop: 18,
+                justifyContent: isMobile ? undefined : 'center',
+              }}>
                 {SUGGESTION_PILLS.map(pill => (
-                  <SuggestionPill key={pill} label={pill} onClick={() => sendMessage(pill)} />
+                  <SuggestionPill key={pill} label={pill} onClick={() => sendMessage(pill)} mobile={isMobile} />
                 ))}
               </div>
             </div>
@@ -627,7 +728,7 @@ export default function Alex() {
               className="alex-msgs"
               style={{
                 flex: 1, minHeight: 0, overflowY: 'auto',
-                padding: '32px 48px 16px',
+                padding: isMobile ? '16px 16px 12px' : '32px 48px 16px',
                 display: 'flex', flexDirection: 'column', gap: 18,
                 scrollbarWidth: 'none',
               }}
@@ -645,7 +746,7 @@ export default function Alex() {
             {/* Bottom input bar */}
             <div style={{
               flexShrink: 0,
-              padding: '14px 48px 24px',
+              padding: isMobile ? '12px 16px 16px' : '14px 48px 24px',
               background: '#F8FAFC',
               borderTop: '1px solid #E8EDF2',
             }}>

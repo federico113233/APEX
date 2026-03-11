@@ -66,6 +66,11 @@ const NAV_ITEMS = [
     label: 'Tracker',
     icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2',
   },
+  {
+    to: '/dashboard/alex',
+    label: 'Alex',
+    isAlex: true,
+  },
 ]
 
 function MobileBottomNav() {
@@ -77,7 +82,7 @@ function MobileBottomNav() {
       className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-slate-200 flex items-stretch"
       style={{ height: 64, paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
-      {NAV_ITEMS.map(({ to, end, label, icon, badge }) => {
+      {NAV_ITEMS.map(({ to, end, label, icon, badge, isAlex }) => {
         const count = badge === 'drafts' ? draftCount : 0
         return (
           <NavLink
@@ -93,20 +98,36 @@ function MobileBottomNav() {
             {({ isActive }) => (
               <>
                 <div className="relative">
-                  <svg
-                    width="22"
-                    height="22"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={isActive ? 2.2 : 1.8}
-                      d={icon}
+                  {isAlex ? (
+                    <img
+                      src="/apex_x_blue.png"
+                      alt=""
+                      style={{
+                        width: 20,
+                        height: 20,
+                        objectFit: 'contain',
+                        filter: isActive
+                          ? 'none'
+                          : 'grayscale(100%) opacity(0.45)',
+                        transition: 'filter 0.15s',
+                      }}
                     />
-                  </svg>
+                  ) : (
+                    <svg
+                      width="20"
+                      height="20"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={isActive ? 2.2 : 1.8}
+                        d={icon}
+                      />
+                    </svg>
+                  )}
                   {count > 0 && (
                     <span
                       style={{

@@ -161,13 +161,14 @@ export function UserProvider({ children }) {
           loadProfile(session.user.id),
           loadApplications(session.user.id),
           loadDrafts(session.user.id),
-        ]).catch((err) => console.error('[Auth] background load error:', err))
+        ])
+          .catch((err) => console.error('[Auth] background load error:', err))
+          .finally(() => { clearTimeout(safetyTimer); resolve() })
       } else {
         setProfileLoaded(true)
+        clearTimeout(safetyTimer)
+        resolve()
       }
-
-      clearTimeout(safetyTimer)
-      resolve()
     }).catch((err) => {
       console.error('[Auth] getSession threw:', err)
       clearTimeout(safetyTimer)

@@ -62,9 +62,16 @@ function RequireAuth({ children }) {
 // ── Redirect to /onboarding if authenticated but profile incomplete ───────────
 function RequireOnboarded({ children }) {
   const { session, sessionLoading, user, profileLoaded } = useUser()
+  // 1. Wait for session resolution first
   if (sessionLoading) return <AuthLoading />
+  // 2. No session → send to login (also handles post-logout where profileLoaded=false)
   if (!session) return <Navigate to="/login" replace />
-  if (profileLoaded && !user.onboarded) return <Navigate to="/onboarding" replace />
+  // 3. Session exists but profile not yet loaded from Supabase — keep waiting.
+  //    This prevents premature /onboarding redirects on new devices where
+  //    localStorage has no onboarded flag and profile is still in-flight.
+  if (!profileLoaded) return <AuthLoading />
+  // 4. Profile loaded: check onboarding
+  if (!user.onboarded) return <Navigate to="/onboarding" replace />
   return children
 }
 

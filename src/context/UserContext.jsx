@@ -73,6 +73,9 @@ function rowToApp(row) {
     notes:        row.notes       || '',
     matchScore:   row.match_score  || 0,
     appliedDate:  new Date(row.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    description:  row.description  || '',
+    jobUrl:       row.job_url      || '',
+    manual:       row.manual       || false,
   }
 }
 
@@ -289,6 +292,41 @@ export function UserProvider({ children }) {
     if (error) console.error('[Supabase] updateApplicationNotes error:', error)
   }
 
+  const addManualJob = async ({ title, company, location, description, jobUrl }) => {
+    const userId = session?.user?.id
+    const jobId = `manual_${crypto.randomUUID()}`
+    if (userId) {
+      const { error } = await supabase
+        .from('applications')
+        .insert({
+          user_id:     userId,
+          job_id:      jobId,
+          job_title:   title,
+          company:     company,
+          location:    location || '',
+          description: description || '',
+          job_url:     jobUrl || '',
+          status:      'Applied',
+          match_score: null,
+          manual:      true,
+          notes:       '',
+        })
+      if (error) {
+        console.error('[Supabase] addManualJob error:', error)
+      } else {
+        await loadApplications(userId)
+      }
+    } else {
+      const appliedDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      setApplications((prev) => [{
+        id: jobId, jobId, title, company, location: location || '',
+        description: description || '', jobUrl: jobUrl || '',
+        status: 'Applied', tailoredCv: '', coverLetter: '',
+        notes: '', matchScore: 0, appliedDate, manual: true,
+      }, ...prev])
+    }
+  }
+
   const deleteApplication = async (appId) => {
     setApplications((prev) => prev.filter((a) => a.id !== appId))
     const { error } = await supabase
@@ -339,7 +377,7 @@ export function UserProvider({ children }) {
     <UserContext.Provider value={{
       session, sessionLoading,
       user, profileLoaded, updateProfile,
-      applications, addApplication, updateStatus, updateApplicationNotes, deleteApplication,
+      applications, addApplication, addManualJob, updateStatus, updateApplicationNotes, deleteApplication,
       drafts, saveDraft, deleteDraft,
       signOut,
     }}>

@@ -234,9 +234,72 @@ function DraftCard({ draft, onLoad, onDelete }) {
   )
 }
 
+// ─── Markdown renderer for CV / Cover Letter preview ─────────────────────────
+function MarkdownContent({ text }) {
+  const elements = []
+  let listBuf = []
+  let key = 0
+
+  const flush = () => {
+    if (!listBuf.length) return
+    elements.push(
+      <ul key={key++} style={{ listStyle: 'disc', paddingLeft: 20, margin: '0 0 12px' }}>
+        {listBuf.map((item, i) => (
+          <li key={i} style={{ fontSize: 14, color: '#1E293B', lineHeight: 1.7, marginBottom: 2 }}
+            dangerouslySetInnerHTML={{ __html: inlineMarkdown(item) }} />
+        ))}
+      </ul>
+    )
+    listBuf = []
+  }
+
+  for (const line of text.split('\n')) {
+    if (/^### /.test(line)) {
+      flush()
+      elements.push(<h3 key={key++} style={{ margin: '14px 0 4px', fontSize: 14, fontWeight: 600, color: '#1E293B', lineHeight: 1.3 }}
+        dangerouslySetInnerHTML={{ __html: inlineMarkdown(line.replace(/^### /, '')) }} />)
+    } else if (/^## /.test(line)) {
+      flush()
+      elements.push(<h2 key={key++} style={{ margin: '18px 0 4px', fontSize: 15, fontWeight: 700, color: '#0F172A', lineHeight: 1.3 }}
+        dangerouslySetInnerHTML={{ __html: inlineMarkdown(line.replace(/^## /, '')) }} />)
+    } else if (/^# /.test(line)) {
+      flush()
+      elements.push(<h1 key={key++} style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700, color: '#0F172A', lineHeight: 1.3 }}
+        dangerouslySetInnerHTML={{ __html: inlineMarkdown(line.replace(/^# /, '')) }} />)
+    } else if (/^---+$/.test(line.trim())) {
+      flush()
+      elements.push(<hr key={key++} style={{ border: 'none', borderTop: '1px solid #E2E8F0', margin: '16px 0' }} />)
+    } else if (/^[•\-*] /.test(line)) {
+      listBuf.push(line.replace(/^[•\-*] /, ''))
+    } else if (line.trim() === '') {
+      flush()
+      elements.push(<div key={key++} style={{ height: 6 }} />)
+    } else {
+      flush()
+      elements.push(<p key={key++} style={{ margin: '0 0 12px', fontSize: 14, color: '#1E293B', lineHeight: 1.7 }}
+        dangerouslySetInnerHTML={{ __html: inlineMarkdown(line) }} />)
+    }
+  }
+  flush()
+
+  return (
+    <div style={{ fontFamily: 'Inter, sans-serif' }}>
+      {elements}
+    </div>
+  )
+}
+
+function inlineMarkdown(text) {
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong style="font-weight:600">$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`(.+?)`/g, '<code style="background:#F1F5F9;padding:1px 5px;border-radius:4px;font-size:12.5px;font-family:monospace">$1</code>')
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function TailoringLab() {
-  const { user, session, addApplication, drafts, saveDraft, deleteDraft } = useUser()
+  const { user, session, addApplication, applications, drafts, saveDraft, deleteDraft } = useUser()
   const location = useLocation()
   const navigate  = useNavigate()
   const abortRef  = useRef(null)
@@ -251,12 +314,17 @@ export default function TailoringLab() {
   const [questions, setQuestions]       = useState([])
   const [answers, setAnswers]           = useState({})
   const [activeDocTab, setActiveDocTab] = useState('cv')
+  const [viewMode, setViewMode]         = useState('preview') // 'preview' | 'edit'
   const [error, setError]               = useState(null)
   const [addedToTracker, setAddedToTracker] = useState(false)
   const [downloading, setDownloading]   = useState(null)
   const [sessionId, setSessionId]       = useState(null)
   const [activeDraftId, setActiveDraftId] = useState(null)
-  const [descExpanded, setDescExpanded] = useState(false)
+  const [descExpanded, setDescExpanded]   = useState(false)
+  const [alexInput, setAlexInput]         = useState('')
+  const [alexLoading, setAlexLoading]     = useState(false)
+  const [alexBanner, setAlexBanner]       = useState(null) // { text, prevCv, prevCover }
+  const ALEX_PILLS = ['Make it more concise', 'Add more impact', 'Match keywords better', 'Adjust tone']
 
   // Accordion height for job description
   const descInnerRef = useRef(null)
@@ -422,6 +490,61 @@ export default function TailoringLab() {
     setMainTab('new')
   }
 
+  const handleAlexEdit = async (requestText) => {
+    const req = (requestText ?? alexInput).trim()
+    if (!req || alexLoading) return
+    setAlexInput('')
+    setAlexLoading(true)
+    setAlexBanner(null)
+
+    const doc     = activeDocTab === 'cv' ? tailoredCV : coverLetter
+    const docType = activeDocTab === 'cv' ? 'CV' : 'Cover Letter'
+
+    try {
+      const client = getClient()
+      const stream = client.messages.stream({
+        model: MODEL,
+        max_tokens: 4096,
+        system: `You are Alex, an expert CV and cover letter editor. The user wants you to edit their ${docType}.
+Return ONLY the modified document text — no explanations, no preamble, no markdown code blocks, just the document.
+After the document, output exactly: |||ALEX_MSG|||
+Then output one short sentence (max 15 words) describing what you changed, starting with "Done!"`,
+        messages: [{ role: 'user', content: `Here is the current ${docType}:\n\n${doc}\n\nUser request: ${req}\n\nPlease apply the edit and return the full modified ${docType}.` }],
+      })
+
+      let fullText = ''
+      for await (const event of stream) {
+        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+          fullText += event.delta.text
+        }
+      }
+
+      const [newDoc, msgPart = ''] = fullText.split('|||ALEX_MSG|||')
+      const cleanDoc = newDoc.trim()
+      const alexMsg  = msgPart.trim() || 'Done! I\'ve updated the document.'
+
+      const prevCv    = tailoredCV
+      const prevCover = coverLetter
+
+      if (activeDocTab === 'cv') setTailoredCV(cleanDoc)
+      else setCoverLetter(cleanDoc)
+
+      setAlexBanner({ text: alexMsg, prevCv, prevCover })
+    } catch (err) {
+      console.error('[Alex edit]', err)
+      setAlexBanner({ text: 'Something went wrong. Please try again.', prevCv: null, prevCover: null })
+    } finally {
+      setAlexLoading(false)
+    }
+  }
+
+  const handleAlexUndo = () => {
+    if (!alexBanner) return
+    if (alexBanner.prevCv !== null)    setTailoredCV(alexBanner.prevCv)
+    if (alexBanner.prevCover !== null) setCoverLetter(alexBanner.prevCover)
+    setAlexBanner(null)
+  }
+
   const handleChangeJob = () => {
     abortRef.current?.abort?.()
     setActiveJob(null)
@@ -467,31 +590,63 @@ export default function TailoringLab() {
         <>
           {!activeJob ? (
             /* No job selected empty state */
-            <div className="flex-1 bg-white rounded-xl border border-slate-200 px-8 py-16 text-center">
-              <div className="w-14 h-14 mx-auto mb-5 rounded-xl bg-gradient-to-br from-apex-blue to-apex-cyan flex items-center justify-center shadow-sm">
-                <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-              <h3 className="text-lg font-semibold text-apex-text mb-2">No job selected</h3>
-              <p className="text-sm text-apex-muted mb-6 max-w-sm mx-auto">
-                Browse jobs in Discover, then click{' '}
-                <span className="font-semibold text-apex-blue">✦ Tailor Application</span>{' '}
-                to generate your personalised CV and cover letter with AI.
-              </p>
-              <div className="flex gap-3 justify-center">
-                <button onClick={() => navigate('/dashboard/discover')}
-                  className="px-6 py-2.5 rounded-lg font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95 transition-opacity text-sm">
-                  Browse jobs →
-                </button>
-                {drafts.length > 0 && (
-                  <button onClick={() => setMainTab('drafts')}
-                    className="px-6 py-2.5 rounded-lg font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors text-sm">
-                    View Drafts ({drafts.length})
-                  </button>
-                )}
-              </div>
-            </div>
+            (() => {
+              const manualJobs = applications.filter(a => a.manual)
+              return (
+                <div className="flex-1 bg-white rounded-xl border border-slate-200 px-8 py-16 text-center">
+                  <div className="w-14 h-14 mx-auto mb-5 rounded-xl bg-gradient-to-br from-apex-blue to-apex-cyan flex items-center justify-center shadow-sm">
+                    <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-semibold text-apex-text mb-2">No job selected</h3>
+                  <p className="text-sm text-apex-muted mb-6 max-w-sm mx-auto">
+                    Browse jobs in Discover, then click{' '}
+                    <span className="font-semibold text-apex-blue">✦ Tailor Application</span>{' '}
+                    to generate your personalised CV and cover letter with AI.
+                  </p>
+                  <div className="flex gap-3 justify-center">
+                    <button onClick={() => navigate('/dashboard/discover')}
+                      className="px-6 py-2.5 rounded-lg font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95 transition-opacity text-sm">
+                      Browse jobs →
+                    </button>
+                    {drafts.length > 0 && (
+                      <button onClick={() => setMainTab('drafts')}
+                        className="px-6 py-2.5 rounded-lg font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors text-sm">
+                        View Drafts ({drafts.length})
+                      </button>
+                    )}
+                  </div>
+                  {manualJobs.length > 0 && (
+                    <div className="mt-8 max-w-sm mx-auto text-left">
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Manually added jobs</p>
+                      <div className="flex flex-col gap-2">
+                        {manualJobs.map(app => (
+                          <button
+                            key={app.id}
+                            onClick={() => setActiveJob({ id: app.jobId, title: app.title, company: app.company, location: app.location, description: app.description, url: app.jobUrl })}
+                            className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:border-blue-200 hover:bg-blue-50/40 transition-all text-left group"
+                          >
+                            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-100">
+                              <svg className="w-4 h-4 text-slate-400 group-hover:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                              </svg>
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-slate-800 truncate">{app.title}</p>
+                              <p className="text-xs text-slate-400 truncate">{app.company}{app.location ? ` · ${app.location}` : ''}</p>
+                            </div>
+                            <svg className="w-4 h-4 text-slate-300 group-hover:text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })()
           ) : (
             /* ── Two-column layout ── */
             <div className="flex flex-col md:flex-row gap-6 flex-1 min-h-0">
@@ -585,6 +740,91 @@ export default function TailoringLab() {
                   </div>
                 )}
 
+                {/* ── Ask Alex to edit ── */}
+                {phase === 'done' && (tailoredCV || coverLetter) && (
+                  <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                    {/* Divider header */}
+                    <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0"
+                        style={{ background: 'linear-gradient(135deg,#2563EB,#38BDF8)' }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="white">
+                          <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" />
+                        </svg>
+                      </div>
+                      <span className="text-xs font-semibold text-slate-700">Ask Alex to edit</span>
+                      <span className="text-xs text-slate-400 ml-0.5">
+                        · {activeDocTab === 'cv' ? 'Tailored CV' : 'Cover Letter'}
+                      </span>
+                    </div>
+
+                    {/* Alex response banner */}
+                    {alexBanner && (
+                      <div style={{
+                        margin: '12px 12px 0',
+                        padding: '10px 14px',
+                        borderRadius: 10,
+                        background: '#EFF6FF',
+                        border: '1px solid #DBEAFE',
+                        display: 'flex', alignItems: 'center', gap: 8,
+                      }}>
+                        <svg width="14" height="14" fill="none" stroke="#2563EB" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span style={{ fontSize: 12, color: '#1D4ED8', flex: 1, lineHeight: 1.4 }}>{alexBanner.text}</span>
+                        {alexBanner.prevCv !== null || alexBanner.prevCover !== null ? (
+                          <button
+                            onClick={handleAlexUndo}
+                            style={{ fontSize: 11, fontWeight: 600, color: '#64748B', background: 'none', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap', padding: '2px 6px', borderRadius: 6 }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#E2E8F0'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                          >
+                            Undo
+                          </button>
+                        ) : null}
+                      </div>
+                    )}
+
+                    <div className="p-3 space-y-2.5">
+                      {/* Quick pills */}
+                      <div className="flex flex-wrap gap-1.5">
+                        {ALEX_PILLS.map(pill => (
+                          <button
+                            key={pill}
+                            onClick={() => handleAlexEdit(pill)}
+                            disabled={alexLoading}
+                            className="px-2.5 py-1 rounded-full text-xs font-medium border border-blue-200 text-blue-600 bg-white hover:bg-blue-50 transition-colors disabled:opacity-50"
+                          >
+                            {pill}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Free text input */}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={alexInput}
+                          onChange={e => setAlexInput(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') handleAlexEdit() }}
+                          placeholder="Or type your request…"
+                          disabled={alexLoading}
+                          className="flex-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-apex-blue focus:border-transparent transition-shadow disabled:opacity-50"
+                        />
+                        <button
+                          onClick={() => handleAlexEdit()}
+                          disabled={!alexInput.trim() || alexLoading}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50 transition-opacity"
+                          style={{ background: 'linear-gradient(135deg,#2563EB,#38BDF8)' }}
+                        >
+                          {alexLoading ? (
+                            <span className="inline-block w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" />
+                          ) : 'Send'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Regenerate button */}
                 {phase === 'done' && (
                   <button
@@ -638,27 +878,53 @@ export default function TailoringLab() {
                           {label}
                         </button>
                       ))}
-                      <div className="ml-auto px-4">
+                      <div className="ml-auto flex items-center gap-3 px-4">
+                        {/* Preview / Edit toggle */}
+                        <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
+                          {['preview', 'edit'].map(mode => (
+                            <button
+                              key={mode}
+                              onClick={() => setViewMode(mode)}
+                              className={`px-3 py-1 rounded-md text-xs font-medium transition-all capitalize ${
+                                viewMode === mode
+                                  ? 'bg-white text-slate-800 shadow-sm'
+                                  : 'text-slate-500 hover:text-slate-700'
+                              }`}
+                            >
+                              {mode}
+                            </button>
+                          ))}
+                        </div>
                         <button
                           onClick={() => navigator.clipboard?.writeText(activeDocTab === 'cv' ? tailoredCV : coverLetter)}
                           className="text-xs text-slate-400 hover:text-apex-blue transition-colors"
                         >
-                          Copy to clipboard
+                          Copy
                         </button>
                       </div>
                     </div>
 
-                    {/* Textarea */}
-                    <div className="flex-1 p-5">
-                      <textarea
-                        value={activeDocTab === 'cv' ? tailoredCV : coverLetter}
-                        onChange={(e) => activeDocTab === 'cv'
-                          ? setTailoredCV(e.target.value)
-                          : setCoverLetter(e.target.value)
-                        }
-                        spellCheck={false}
-                        className="w-full h-full min-h-[500px] font-mono text-[13px] text-slate-800 leading-relaxed bg-slate-50/60 rounded-xl p-5 border border-slate-100 focus:outline-none focus:ring-2 focus:ring-apex-blue/20 focus:border-apex-blue/30 resize-none"
-                      />
+                    {/* Preview or Edit */}
+                    <div className="flex-1 overflow-y-auto">
+                      {viewMode === 'preview' ? (
+                        <div className="p-6">
+                          <MarkdownContent
+                            text={activeDocTab === 'cv' ? tailoredCV : coverLetter}
+                          />
+                        </div>
+                      ) : (
+                        <div className="p-5 h-full">
+                          <textarea
+                            value={activeDocTab === 'cv' ? tailoredCV : coverLetter}
+                            onChange={(e) => activeDocTab === 'cv'
+                              ? setTailoredCV(e.target.value)
+                              : setCoverLetter(e.target.value)
+                            }
+                            spellCheck={false}
+                            className="w-full h-full min-h-[500px] font-mono text-[13px] text-slate-800 leading-relaxed bg-slate-50/60 rounded-xl p-5 border border-slate-100 focus:outline-none focus:ring-2 focus:ring-apex-blue/20 focus:border-apex-blue/30 resize-none"
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {/* Bottom action bar */}

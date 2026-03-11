@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useLayoutEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../context/UserContext'
+import AddJobModal from '../components/AddJobModal'
 
 // ─── Search history ──────────────────────────────────────────────────────────
 const HISTORY_KEY = 'apex_search_history'
@@ -139,21 +140,33 @@ function detectWorkMode(title, desc) {
 function applyFrontendFilters(jobs, ff, hasKeyword) {
   let r = jobs
 
+  // CONTRACT TYPE — include if not explicitly specified, exclude only on explicit contradiction
   if (ff.contractTypes.length > 0) {
     r = r.filter(j => {
       const h = `${j.title} ${j.description}`.toLowerCase()
+      const isIntern    = INTERN_WORDS.some(w => h.includes(w))
+      const isPartTime  = j.type === 'Part Time'  || /part.time/.test(h)
+      const isFreelance = j.type === 'Contract'   || /freelance|contractor/.test(h)
+      const isFullTime  = j.type === 'Full Time'  || j.type === 'Permanent'
+      // If no contract type is detectable → always show
+      if (!isIntern && !isPartTime && !isFreelance && !isFullTime) return true
+      // Explicitly detected → show only if it matches a selected type
       return ff.contractTypes.some(ct => {
-        if (ct === 'Internship') return INTERN_WORDS.some(w => h.includes(w))
-        if (ct === 'Part-time')  return j.type === 'Part Time' || /part.time/.test(h)
-        if (ct === 'Freelance')  return j.type === 'Contract' || /freelance|contractor/.test(h)
-        if (ct === 'Full-time')  return j.type === 'Full Time' || j.type === 'Permanent'
+        if (ct === 'Internship') return isIntern
+        if (ct === 'Part-time')  return isPartTime
+        if (ct === 'Freelance')  return isFreelance
+        if (ct === 'Full-time')  return isFullTime
         return false
       })
     })
   }
 
+  // WORK MODE — include if not explicitly specified, exclude only on explicit contradiction
   if (ff.workModes.length > 0) {
-    r = r.filter(j => ff.workModes.some(m => j.workModes.includes(m)))
+    r = r.filter(j => {
+      if (j.workModes.length === 0) return true // not specified → always show
+      return ff.workModes.some(m => j.workModes.includes(m))
+    })
   }
 
   // Sector as frontend filter only when keyword is also active
@@ -165,9 +178,13 @@ function applyFrontendFilters(jobs, ff, hasKeyword) {
     })
   }
 
+  // EDUCATION — include if not specified, exclude only if job requires a HIGHER level
   if (ff.minEdu && ff.minEdu !== 'Any') {
-    const minRank = EDU_RANK[ff.minEdu] || 0
-    r = r.filter(j => (EDU_RANK[j.education] || 0) >= minRank)
+    const selectedRank = EDU_RANK[ff.minEdu]
+    r = r.filter(j => {
+      if (j.education === 'Any') return true // not mentioned → always show
+      return EDU_RANK[j.education] <= selectedRank // exclude only if requires MORE
+    })
   }
 
   return r
@@ -644,6 +661,7 @@ export default function Discover() {
   const [expandedId, setExpandedId] = useState(null)
   const [openFilter, setOpenFilter] = useState(null) // which chip dropdown is open
   const [appliedIds, setAppliedIds] = useState(() => new Set(applications.map(a => a.id)))
+  const [showAddModal, setShowAddModal] = useState(false)
 
   const profileSectors = user.sectors?.length ? user.sectors : user.sector ? [user.sector] : []
 
@@ -824,6 +842,7 @@ export default function Discover() {
   const toggle = (id) => setOpenFilter(o => o === id ? null : id)
 
   return (
+  <>
     <div className="p-4 md:p-8 page-fade-in">
       {/* Header */}
       <div className="mb-6">
@@ -909,6 +928,25 @@ export default function Discover() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* ── Manual job link ── */}
+      <div className="flex justify-end mb-1 -mt-1">
+        <button
+          onClick={() => setShowAddModal(true)}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+            fontSize: 13, color: '#94A3B8', display: 'inline-flex', alignItems: 'center', gap: 5,
+            transition: 'color 0.15s',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = '#2563EB' }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = '#94A3B8' }}
+        >
+          <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Found a job elsewhere? Add it manually
+        </button>
       </div>
 
       {/* ── Filter chips row ── */}
@@ -1073,5 +1111,13 @@ export default function Discover() {
         ))}
       </div>
     </div>
+
+    {showAddModal && (
+      <AddJobModal
+        onClose={() => setShowAddModal(false)}
+        onAdded={() => {}}
+      />
+    )}
+  </>
   )
 }

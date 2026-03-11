@@ -1,170 +1,560 @@
-import { Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import Anthropic from '@anthropic-ai/sdk'
 import { useUser } from '../context/UserContext'
 
-function Dashboard() {
-  const { user, applications } = useUser()
+const MODEL = 'claude-sonnet-4-20250514'
 
-  const applied    = applications.length
-  const interviews = applications.filter((a) => a.status === 'Interview').length
-  const offers     = applications.filter((a) => a.status === 'Offer').length
+function getClient() {
+  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
+  if (!apiKey) return null
+  return new Anthropic({ apiKey, dangerouslyAllowBrowser: true })
+}
 
-  const hour = new Date().getHours()
-  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
-  const firstName = user.name ? user.name.split(' ')[0] : null
+async function fetchAlexMessage(user, applications, drafts) {
+  const client = getClient()
+  if (!client) return ''
+  const appsList = applications.slice(0, 8).map(a => `- ${a.title} at ${a.company} (${a.status})`).join('\n')
+  const msg = await client.messages.create({
+    model: MODEL,
+    max_tokens: 72,
+    system: `You are Alex, an AI career advisor. Write exactly 1-2 concise sentences for a dashboard greeting card. Be specific to the user's actual data. No pleasantries, no greetings, no emoji, no "I". Start directly with an insight or action. Examples: "Your interview at Tradex is coming up — let's make sure you're ready." or "Three rejections in a row often signal a CV issue — I spotted a pattern worth discussing."`,
+    messages: [{
+      role: 'user',
+      content: `Name: ${user.name || 'Student'}\nApplications:\n${appsList || 'None'}\nDrafts in progress: ${drafts?.length || 0}\nCV available: ${!!user.cvText}`,
+    }],
+  })
+  return msg.content?.[0]?.text?.trim() || ''
+}
 
-  const stats = [
-    {
-      label: 'Applications sent',
-      value: String(applied),
-      sub: applied === 1 ? '1 application' : `${interviews} in interview`,
-      href: '/dashboard/tracker',
-      icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2',
-      color: 'from-blue-500 to-blue-600',
-    },
-    {
-      label: 'Interviews scheduled',
-      value: String(interviews),
-      sub: offers > 0 ? `${offers} offer${offers > 1 ? 's' : ''}` : 'Keep applying!',
-      href: '/dashboard/tracker',
-      icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
-      color: 'from-violet-500 to-violet-600',
-    },
-    {
-      label: 'Match score avg',
-      value: '87%',
-      sub: 'Based on your profile',
-      href: '/dashboard/discover',
-      icon: 'M13 10V3L4 14h7v7l9-11h-7z',
-      color: 'from-cyan-500 to-cyan-600',
-    },
-  ]
+const STATUS_STYLE = {
+  Applied:   { background: '#EFF6FF', color: '#2563EB' },
+  Interview: { background: '#FFFBEB', color: '#D97706' },
+  Offer:     { background: '#F0FDF4', color: '#16A34A' },
+  Rejected:  { background: '#FEF2F2', color: '#DC2626' },
+}
 
-  const quickActions = [
-    {
-      to: '/dashboard/discover',
-      label: 'Discover Jobs',
-      desc: 'Find your next opportunity',
-      icon: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z',
-      primary: true,
-    },
-    {
-      to: '/dashboard/tailoring-lab',
-      label: 'Tailoring Lab',
-      desc: 'Generate CV & cover letter',
-      icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z',
-      primary: false,
-    },
-    {
-      to: '/dashboard/tracker',
-      label: 'View Tracker',
-      desc: 'Monitor all applications',
-      icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
-      primary: false,
-    },
-  ]
+const QUICK_ACTIONS = [
+  {
+    to: '/dashboard/discover',
+    label: 'Discover Jobs',
+    desc: 'Find your next opportunity',
+    icon: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z',
+  },
+  {
+    to: '/dashboard/tailoring-lab',
+    label: 'Tailoring Lab',
+    desc: 'CV & cover letter',
+    icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z',
+  },
+  {
+    to: '/dashboard/tracker',
+    label: 'Tracker',
+    desc: 'All applications',
+    icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2',
+  },
+]
 
+// ── Small reusable QuickActionCard ────────────────────────────────────────────
+function QuickActionCard({ to, label, desc, icon }) {
+  const [hov, setHov] = useState(false)
   return (
-    <div className="p-4 md:p-8 max-w-5xl page-fade-in">
-      {/* Greeting */}
-      <div className="mb-10">
-        <h1 className="text-2xl font-bold text-slate-900">
-          {firstName ? `${greeting}, ${firstName} 👋` : `${greeting} 👋`}
-        </h1>
-        <p className="text-slate-500 mt-1 text-sm">Here's your job application overview.</p>
+    <Link
+      to={to}
+      style={{
+        flex: 1,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '14px 16px',
+        background: '#fff',
+        borderRadius: 10,
+        border: `1.5px solid ${hov ? '#BFDBFE' : '#E2E8F0'}`,
+        boxShadow: hov ? '0 4px 16px rgba(37,99,235,0.08)' : '0 1px 3px rgba(15,23,42,0.04)',
+        textDecoration: 'none',
+        transition: 'all 0.18s',
+      }}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+    >
+      <div style={{
+        width: 34, height: 34, borderRadius: 8, flexShrink: 0,
+        background: hov ? '#EFF6FF' : '#F8FAFC',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        transition: 'background 0.18s',
+      }}>
+        <svg width="16" height="16" fill="none" stroke={hov ? '#2563EB' : '#64748B'} viewBox="0 0 24 24" style={{ transition: 'stroke 0.18s' }}>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.9} d={icon} />
+        </svg>
       </div>
-
-      {/* Stats */}
-      <div className="grid md:grid-cols-3 gap-4 mb-10">
-        {stats.map(({ label, value, sub, href, icon, color }) => (
-          <Link
-            key={label}
-            to={href}
-            className="group block bg-white rounded-xl border border-slate-100 p-6 hover:border-blue-100 hover:shadow-md transition-all duration-200"
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div
-                className={`w-9 h-9 rounded-lg bg-gradient-to-br ${color} flex items-center justify-center`}
-              >
-                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon} />
-                </svg>
-              </div>
-              <svg className="w-4 h-4 text-slate-300 group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </div>
-            <p className="text-3xl font-bold text-slate-900 mb-1">{value}</p>
-            <p className="text-sm font-medium text-slate-600 mb-0.5">{label}</p>
-            <p className="text-xs text-slate-400">{sub}</p>
-          </Link>
-        ))}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#0F172A' }}>{label}</p>
+        <p style={{ margin: '1px 0 0', fontSize: 11.5, color: '#94A3B8' }}>{desc}</p>
       </div>
-
-      {/* Quick actions */}
-      <div className="mb-10">
-        <h2 className="text-base font-semibold text-slate-900 mb-4">Quick actions</h2>
-        <div className="grid sm:grid-cols-3 gap-3">
-          {quickActions.map(({ to, label, desc, icon, primary }) => (
-            <Link
-              key={to}
-              to={to}
-              className={`flex items-center gap-4 p-4 rounded-xl border transition-all duration-150 ${
-                primary
-                  ? 'text-white border-transparent shadow-md shadow-blue-500/20 hover:opacity-90'
-                  : 'bg-white border-slate-100 text-slate-700 hover:border-blue-100 hover:shadow-sm'
-              }`}
-              style={primary ? { background: 'linear-gradient(135deg, #2563EB, #38BDF8)' } : {}}
-            >
-              <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                primary ? 'bg-white/20' : 'bg-slate-100'
-              }`}>
-                <svg className={`w-4 h-4 ${primary ? 'text-white' : 'text-slate-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon} />
-                </svg>
-              </div>
-              <div>
-                <p className={`text-sm font-semibold ${primary ? 'text-white' : 'text-slate-800'}`}>{label}</p>
-                <p className={`text-xs mt-0.5 ${primary ? 'text-white/75' : 'text-slate-400'}`}>{desc}</p>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </div>
-
-      {/* Recent applications preview */}
-      {applications.length > 0 && (
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-slate-900">Recent applications</h2>
-            <Link to="/dashboard/tracker" className="text-sm text-blue-600 hover:underline font-medium">
-              View all →
-            </Link>
-          </div>
-          <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
-            {applications.slice(0, 4).map((app, i) => (
-              <div
-                key={app.id}
-                className={`flex items-center gap-4 px-5 py-3.5 ${i < Math.min(applications.length, 4) - 1 ? 'border-b border-slate-50' : ''}`}
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-800 truncate">{app.title}</p>
-                  <p className="text-xs text-slate-400 truncate">{app.company} · {app.appliedDate}</p>
-                </div>
-                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${
-                  app.status === 'Applied'   ? 'bg-blue-50 text-blue-700' :
-                  app.status === 'Interview' ? 'bg-orange-50 text-orange-700' :
-                  app.status === 'Offer'     ? 'bg-green-50 text-green-700' :
-                                               'bg-red-50 text-red-600'
-                }`}>
-                  {app.status}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
+      <svg width="13" height="13" fill="none" stroke={hov ? '#2563EB' : '#CBD5E1'} viewBox="0 0 24 24" style={{ flexShrink: 0, transition: 'stroke 0.18s' }}>
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+      </svg>
+    </Link>
   )
 }
 
-export default Dashboard
+// ── Main component ────────────────────────────────────────────────────────────
+export default function Dashboard() {
+  const { user, applications, drafts } = useUser()
+  const navigate = useNavigate()
+
+  const hour       = new Date().getHours()
+  const greeting   = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
+  const firstName  = user.name?.split(' ')[0] || ''
+  const interviews = applications.filter(a => a.status === 'Interview').length
+  const offers     = applications.filter(a => a.status === 'Offer').length
+  const draftCount = drafts?.length ?? 0
+
+  const heroSubtitle =
+    interviews > 0
+      ? `You have ${interviews} interview${interviews > 1 ? 's' : ''} scheduled. Here's your overview.`
+      : offers > 0
+      ? `You have ${offers} offer${offers > 1 ? 's' : ''} — congratulations. Here's your overview.`
+      : applications.length > 0
+      ? `You have ${applications.length} active application${applications.length !== 1 ? 's' : ''}. Keep the momentum going.`
+      : 'Welcome to APEX. Start exploring opportunities below.'
+
+  const statsLine = [
+    `${applications.length} application${applications.length !== 1 ? 's' : ''}`,
+    `${interviews} interview${interviews !== 1 ? 's' : ''}`,
+    `${draftCount} draft${draftCount !== 1 ? 's' : ''}`,
+  ].join(' · ')
+
+  // Alex card message
+  const [alexMsg, setAlexMsg]         = useState('')
+  const [alexLoading, setAlexLoading] = useState(true)
+  const [alexHov, setAlexHov]         = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      try {
+        const msg = await fetchAlexMessage(user, applications, drafts)
+        if (!cancelled) setAlexMsg(msg)
+      } catch {
+        if (!cancelled) setAlexMsg('Ready to help with your job search. Let\'s talk strategy.')
+      } finally {
+        if (!cancelled) setAlexLoading(false)
+      }
+    }
+    run()
+    return () => { cancelled = true }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fade-in animation trigger
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setReady(true), 40)
+    return () => clearTimeout(t)
+  }, [])
+
+  const fadeStyle = (delay = 0) => ({
+    opacity:   ready ? 1 : 0,
+    transform: ready ? 'translateY(0)' : 'translateY(14px)',
+    transition: `opacity 0.45s ease ${delay}ms, transform 0.45s ease ${delay}ms`,
+  })
+
+  return (
+    <>
+      <style>{`
+        @keyframes dash-pulse {
+          0%, 100% { opacity: 0.5; }
+          50% { opacity: 1; }
+        }
+      `}</style>
+
+      <div style={{ background: '#F8FAFC', minHeight: '100vh' }}>
+
+        {/* ── HERO ── */}
+        <div style={{
+          background: '#0F172A',
+          borderRadius: '0 0 28px 28px',
+          padding: '44px 40px 80px',
+          position: 'relative',
+          overflow: 'hidden',
+        }}>
+          {/* Watermark */}
+          <img
+            src="/apex_x_blue.png"
+            alt=""
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              right: 32,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              width: 200,
+              height: 200,
+              objectFit: 'contain',
+              opacity: 0.06,
+              pointerEvents: 'none',
+              userSelect: 'none',
+            }}
+          />
+
+          <div style={{ position: 'relative', maxWidth: 1100, margin: '0 auto', ...fadeStyle(0) }}>
+            <h1 style={{
+              margin: 0,
+              fontSize: 36,
+              fontWeight: 700,
+              color: '#fff',
+              letterSpacing: '-0.03em',
+              lineHeight: 1.15,
+            }}>
+              {greeting}{firstName ? `, ${firstName}` : ''}
+            </h1>
+            <p style={{
+              margin: '10px 0 0',
+              fontSize: 15,
+              color: '#94A3B8',
+              lineHeight: 1.5,
+            }}>
+              {heroSubtitle}
+            </p>
+            <p style={{
+              margin: '10px 0 0',
+              fontSize: 13,
+              color: 'rgba(255,255,255,0.38)',
+              letterSpacing: '0.01em',
+            }}>
+              {statsLine}
+            </p>
+          </div>
+        </div>
+
+        {/* ── CONTENT — overlaps hero ── */}
+        <div style={{
+          maxWidth: 1100,
+          margin: '-40px auto 0',
+          padding: '0 32px 48px',
+          position: 'relative',
+          zIndex: 10,
+        }}>
+          <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+
+            {/* ── LEFT COLUMN (58%) ── */}
+            <div style={{ flex: '0 0 58%', display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+              {/* Alex Card */}
+              <div
+                onClick={() => navigate('/dashboard/alex')}
+                onMouseEnter={() => setAlexHov(true)}
+                onMouseLeave={() => setAlexHov(false)}
+                style={{
+                  background: 'linear-gradient(135deg, #2563EB 0%, #38BDF8 100%)',
+                  borderRadius: 16,
+                  padding: 28,
+                  cursor: 'pointer',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  boxShadow: alexHov
+                    ? '0 20px 48px rgba(37,99,235,0.38)'
+                    : '0 10px 32px rgba(37,99,235,0.24)',
+                  transform: alexHov ? 'translateY(-2px)' : 'translateY(0)',
+                  transition: 'box-shadow 0.2s, transform 0.2s',
+                  ...fadeStyle(80),
+                }}
+              >
+                {/* Watermark */}
+                <img
+                  src="/apex_x_blue.png"
+                  alt=""
+                  aria-hidden="true"
+                  style={{
+                    position: 'absolute',
+                    right: 20,
+                    bottom: -10,
+                    height: 88,
+                    width: 88,
+                    objectFit: 'contain',
+                    opacity: 0.12,
+                    pointerEvents: 'none',
+                  }}
+                />
+
+                {/* Label */}
+                <p style={{
+                  margin: '0 0 14px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: 'rgba(255,255,255,0.65)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.1em',
+                }}>
+                  Alex · AI Career Advisor
+                </p>
+
+                {/* Message */}
+                <div style={{ marginBottom: 22, minHeight: 42 }}>
+                  {alexLoading ? (
+                    <div style={{ display: 'flex', gap: 5, alignItems: 'center', paddingTop: 4 }}>
+                      {[0, 150, 300].map(d => (
+                        <span key={d} style={{
+                          width: 6, height: 6, borderRadius: '50%',
+                          background: 'rgba(255,255,255,0.55)',
+                          display: 'inline-block',
+                          animation: `dash-pulse 1.2s infinite ease-in-out`,
+                          animationDelay: `${d}ms`,
+                        }} />
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{
+                      margin: 0,
+                      fontSize: 15.5,
+                      fontWeight: 500,
+                      color: '#fff',
+                      lineHeight: 1.55,
+                      letterSpacing: '-0.005em',
+                    }}>
+                      {alexMsg || 'Ready to help with your job search. Let\'s talk strategy.'}
+                    </p>
+                  )}
+                </div>
+
+                {/* CTA Button */}
+                <button
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '9px 18px',
+                    borderRadius: 8,
+                    background: '#fff',
+                    color: '#2563EB',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    border: 'none',
+                    cursor: 'pointer',
+                    letterSpacing: '-0.01em',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+                    transition: 'opacity 0.15s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.opacity = '0.92' }}
+                  onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
+                  onClick={e => { e.stopPropagation(); navigate('/dashboard/alex') }}
+                >
+                  Talk to Alex
+                  <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Quick Actions */}
+              <div style={fadeStyle(160)}>
+                <p style={{
+                  margin: '0 0 10px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: '#94A3B8',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                }}>
+                  Quick actions
+                </p>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  {QUICK_ACTIONS.map(qa => (
+                    <QuickActionCard key={qa.to} {...qa} />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* ── RIGHT COLUMN (42%) ── */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+              {/* Applications */}
+              <div style={{
+                background: '#fff',
+                borderRadius: 14,
+                border: '1px solid #E8EDF2',
+                overflow: 'hidden',
+                boxShadow: '0 1px 4px rgba(15,23,42,0.05)',
+                ...fadeStyle(120),
+              }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '16px 20px 14px',
+                  borderBottom: applications.length > 0 ? '1px solid #F1F5F9' : 'none',
+                }}>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#0F172A' }}>Applications</p>
+                  <Link
+                    to="/dashboard/tracker"
+                    style={{ fontSize: 12, fontWeight: 600, color: '#2563EB', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3 }}
+                  >
+                    View all
+                    <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Link>
+                </div>
+
+                {applications.length === 0 ? (
+                  <div style={{ padding: '28px 20px', textAlign: 'center' }}>
+                    <p style={{ margin: 0, fontSize: 13, color: '#CBD5E1' }}>No applications yet</p>
+                    <Link
+                      to="/dashboard/discover"
+                      style={{ display: 'inline-block', marginTop: 10, fontSize: 12, fontWeight: 600, color: '#2563EB', textDecoration: 'none' }}
+                    >
+                      Discover jobs
+                    </Link>
+                  </div>
+                ) : (
+                  applications.slice(0, 4).map((app, i) => (
+                    <AppRow
+                      key={app.id}
+                      app={app}
+                      divider={i < Math.min(applications.length, 4) - 1}
+                    />
+                  ))
+                )}
+              </div>
+
+              {/* Active Drafts */}
+              <div style={{
+                background: '#fff',
+                borderRadius: 14,
+                border: '1px solid #E8EDF2',
+                overflow: 'hidden',
+                boxShadow: '0 1px 4px rgba(15,23,42,0.05)',
+                ...fadeStyle(200),
+              }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '16px 20px 14px',
+                  borderBottom: draftCount > 0 ? '1px solid #F1F5F9' : 'none',
+                }}>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#0F172A' }}>In progress</p>
+                  <Link
+                    to="/dashboard/tailoring-lab"
+                    style={{ fontSize: 12, fontWeight: 600, color: '#2563EB', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3 }}
+                  >
+                    Open Lab
+                    <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Link>
+                </div>
+
+                {draftCount === 0 ? (
+                  <div style={{ padding: '20px', textAlign: 'center' }}>
+                    <p style={{ margin: 0, fontSize: 13, color: '#CBD5E1' }}>No drafts yet</p>
+                  </div>
+                ) : (
+                  drafts.slice(0, 3).map((draft, i) => (
+                    <DraftRow
+                      key={draft.id}
+                      draft={draft}
+                      divider={i < Math.min(draftCount, 3) - 1}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ── Application row ───────────────────────────────────────────────────────────
+function AppRow({ app, divider }) {
+  const [hov, setHov] = useState(false)
+  const badge = STATUS_STYLE[app.status] || STATUS_STYLE.Applied
+
+  return (
+    <Link
+      to="/dashboard/tracker"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '12px 20px',
+        background: hov ? '#FAFBFC' : 'transparent',
+        borderBottom: divider ? '1px solid #F8FAFC' : 'none',
+        textDecoration: 'none',
+        transition: 'background 0.15s',
+      }}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {app.title}
+        </p>
+        <p style={{ margin: '2px 0 0', fontSize: 11.5, color: '#94A3B8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {app.company}
+          {app.appliedDate ? ` · ${app.appliedDate}` : ''}
+        </p>
+      </div>
+      <span style={{
+        flexShrink: 0,
+        display: 'inline-flex',
+        alignItems: 'center',
+        padding: '3px 9px',
+        borderRadius: 99,
+        fontSize: 11,
+        fontWeight: 600,
+        ...badge,
+      }}>
+        {app.status}
+      </span>
+    </Link>
+  )
+}
+
+// ── Draft row ─────────────────────────────────────────────────────────────────
+function DraftRow({ draft, divider }) {
+  const [hov, setHov] = useState(false)
+
+  return (
+    <Link
+      to="/dashboard/tailoring-lab"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '12px 20px',
+        background: hov ? '#FAFBFC' : 'transparent',
+        borderBottom: divider ? '1px solid #F8FAFC' : 'none',
+        textDecoration: 'none',
+        transition: 'background 0.15s',
+      }}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {draft.job_title || 'Untitled draft'}
+        </p>
+        {draft.company && (
+          <p style={{ margin: '2px 0 0', fontSize: 11.5, color: '#94A3B8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {draft.company}
+          </p>
+        )}
+      </div>
+      <span style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 3,
+        fontSize: 12,
+        fontWeight: 600,
+        color: hov ? '#2563EB' : '#94A3B8',
+        transition: 'color 0.15s',
+        flexShrink: 0,
+      }}>
+        Continue
+        <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+        </svg>
+      </span>
+    </Link>
+  )
+}

@@ -50,6 +50,13 @@ body {
   animation: pageFadeIn 0.25s ease both;
 }
 
+/* ── Profile two-column grid → single column on narrow screens ── */
+@media (max-width: 768px) {
+  .profile-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 @keyframes pageFadeIn {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }

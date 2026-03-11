@@ -10,6 +10,7 @@ import Discover from './pages/Discover'
 import TailoringLab from './pages/TailoringLab'
 import Tracker from './pages/Tracker'
 import Profile from './pages/Profile'
+import Alex from './pages/Alex'
 
 // ── Splash screen ─────────────────────────────────────────────────────────────
 function SplashScreen() {
@@ -100,6 +101,7 @@ function App() {
             <Route path="discover" element={<Discover />} />
             <Route path="tailoring-lab" element={<TailoringLab />} />
             <Route path="tracker" element={<Tracker />} />
+            <Route path="alex" element={<Alex />} />
             <Route path="profile" element={<Profile />} />
           </Route>
 

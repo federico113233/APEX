@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useLayoutEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import Anthropic from '@anthropic-ai/sdk'
 import {
   Document, Packer, Paragraph, TextRun,
   AlignmentType, Footer, PageNumber, BorderStyle,
@@ -29,10 +28,21 @@ Then output exactly this separator: |||QUESTIONS|||
 Then output any clarifying questions you have for the student (empty if none).`
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-function getClient() {
-  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
-  if (!apiKey) throw new Error('VITE_ANTHROPIC_API_KEY is not set in .env.local')
-  return new Anthropic({ apiKey, dangerouslyAllowBrowser: true })
+async function* parseSSE(response) {
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop()
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue
+      try { yield JSON.parse(line.slice(6)) } catch { /* skip */ }
+    }
+  }
 }
 
 function buildUserMessage(user, job, answers = {}) {
@@ -407,19 +417,27 @@ export default function TailoringLab() {
     setStreamText('')
     setError(null)
 
+    const controller = new AbortController()
+    abortRef.current = controller
+
     let fullText = ''
     try {
-      const client = getClient()
-      const stream = client.messages.stream({
-        model: MODEL,
-        max_tokens: 4096,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: buildUserMessage(user, activeJob, currentAnswers) }],
+      const res = await fetch('/api/tailoring', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: buildUserMessage(user, activeJob, currentAnswers) }],
+          systemPrompt: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+          stream: true,
+          maxTokens: 4096,
+        }),
       })
-      abortRef.current = stream
 
-      for await (const event of stream) {
-        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+      if (!res.ok) throw new Error(await res.text())
+
+      for await (const event of parseSSE(res)) {
+        if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
           fullText += event.delta.text
           setStreamText(fullText)
         }
@@ -501,20 +519,22 @@ export default function TailoringLab() {
     const docType = activeDocTab === 'cv' ? 'CV' : 'Cover Letter'
 
     try {
-      const client = getClient()
-      const stream = client.messages.stream({
-        model: MODEL,
-        max_tokens: 4096,
-        system: `You are Alex, an expert CV and cover letter editor. The user wants you to edit their ${docType}.
-Return ONLY the modified document text — no explanations, no preamble, no markdown code blocks, just the document.
-After the document, output exactly: |||ALEX_MSG|||
-Then output one short sentence (max 15 words) describing what you changed, starting with "Done!"`,
-        messages: [{ role: 'user', content: `Here is the current ${docType}:\n\n${doc}\n\nUser request: ${req}\n\nPlease apply the edit and return the full modified ${docType}.` }],
+      const res = await fetch('/api/tailoring', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: `Here is the current ${docType}:\n\n${doc}\n\nUser request: ${req}\n\nPlease apply the edit and return the full modified ${docType}.` }],
+          systemPrompt: `You are Alex, an expert CV and cover letter editor. The user wants you to edit their ${docType}.\nReturn ONLY the modified document text — no explanations, no preamble, no markdown code blocks, just the document.\nAfter the document, output exactly: |||ALEX_MSG|||\nThen output one short sentence (max 15 words) describing what you changed, starting with "Done!"`,
+          stream: true,
+          maxTokens: 4096,
+        }),
       })
 
+      if (!res.ok) throw new Error(await res.text())
+
       let fullText = ''
-      for await (const event of stream) {
-        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+      for await (const event of parseSSE(res)) {
+        if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
           fullText += event.delta.text
         }
       }

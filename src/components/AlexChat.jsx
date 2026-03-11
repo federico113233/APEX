@@ -1,16 +1,21 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import Anthropic from '@anthropic-ai/sdk'
 import { useUser } from '../context/UserContext'
 
-const MODEL = 'claude-sonnet-4-20250514'
-
-function getClient() {
-  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
-  console.log('[AlexChat] VITE_ANTHROPIC_API_KEY present:', !!apiKey, '| length:', apiKey?.length ?? 0)
-  if (!apiKey) {
-    throw new Error('VITE_ANTHROPIC_API_KEY is not set. Add it to .env.local and restart the dev server.')
+async function* parseSSE(response) {
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop()
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue
+      try { yield JSON.parse(line.slice(6)) } catch { /* skip */ }
+    }
   }
-  return new Anthropic({ apiKey, dangerouslyAllowBrowser: true })
 }
 
 function buildSystemPrompt(user, applications) {
@@ -43,7 +48,7 @@ function buildSystemPrompt(user, applications) {
 
   if (user.linkedinUrl) prompt += `\nLinkedIn: ${user.linkedinUrl}`
 
-  if (user.cvText) prompt += `\n\nStudent's CV:\n${user.cvText}`
+  if (user.cvText) prompt += `\n\nStudent's CV:\n${user.cvText.substring(0, 3000)}`
 
   if (applications.length > 0) {
     prompt += '\n\nCurrent applications:\n'
@@ -172,18 +177,25 @@ export default function AlexChat() {
 
     let fullText = ''
     try {
-      const client = getClient()
-      const stream = client.messages.stream({
-        model: MODEL,
-        max_tokens: 1024,
-        system: buildSystemPrompt(user, applications),
-        messages: historyRef.current,
+      const controller = new AbortController()
+      abortRef.current = controller
+
+      const res = await fetch('/api/alexchat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          messages: historyRef.current,
+          systemPrompt: [{ type: 'text', text: buildSystemPrompt(user, applications), cache_control: { type: 'ephemeral' } }],
+          stream: true,
+          maxTokens: 1024,
+        }),
       })
 
-      abortRef.current = stream
+      if (!res.ok) throw new Error(await res.text())
 
-      for await (const event of stream) {
-        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+      for await (const event of parseSSE(res)) {
+        if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
           fullText += event.delta.text
           setMessages((prev) =>
             prev.map((m) => (m.id === alexId ? { ...m, text: fullText, pending: false } : m))
@@ -202,20 +214,9 @@ export default function AlexChat() {
     } catch (err) {
       if (err.name !== 'AbortError') {
         console.error('[AlexChat] API error:', err)
-        console.error('[AlexChat] Error name:', err?.name)
-        console.error('[AlexChat] Error status:', err?.status)
-        console.error('[AlexChat] Error message:', err?.message)
-
-        let errorText = `Something went wrong (${err?.status ?? err?.name ?? 'unknown'}). Check the browser console for details.`
-        if (err instanceof Anthropic.AuthenticationError || err?.status === 401) {
-          errorText = 'API key missing or invalid — check VITE_ANTHROPIC_API_KEY in .env.local and restart the dev server.'
-        } else if (err?.message?.includes('VITE_ANTHROPIC_API_KEY')) {
-          errorText = err.message
-        }
-
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === alexId ? { ...m, text: errorText, pending: false, error: true } : m
+            m.id === alexId ? { ...m, text: `Something went wrong. Please try again.`, pending: false, error: true } : m
           )
         )
       }

@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import Anthropic from '@anthropic-ai/sdk'
 import { useUser } from '../context/UserContext'
 import { supabase } from '../lib/supabase'
 
@@ -22,10 +21,21 @@ const SUGGESTION_PILLS = [
 ]
 
 // ── API helpers ───────────────────────────────────────────────────────────────
-function getClient() {
-  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
-  if (!apiKey) throw new Error('VITE_ANTHROPIC_API_KEY not set')
-  return new Anthropic({ apiKey, dangerouslyAllowBrowser: true })
+async function* parseSSE(response) {
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop()
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue
+      try { yield JSON.parse(line.slice(6)) } catch { /* skip */ }
+    }
+  }
 }
 
 function buildSystemPrompt(user, applications, drafts) {
@@ -73,19 +83,27 @@ RULES:
 }
 
 async function streamAlex({ messages, systemPrompt, onChunk, onDone, onError, abortRef }) {
+  const controller = new AbortController()
+  if (abortRef) abortRef.current = controller
+
   try {
-    const client = getClient()
-    const stream  = client.messages.stream({
-      model: MODEL,
-      max_tokens: 2048,
-      system: systemPrompt,
-      messages,
+    const res = await fetch('/api/alex', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        messages,
+        systemPrompt: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+        stream: true,
+        maxTokens: 2048,
+      }),
     })
-    if (abortRef) abortRef.current = stream
+
+    if (!res.ok) throw new Error(await res.text())
 
     let text = ''
-    for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+    for await (const event of parseSSE(res)) {
+      if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
         text += event.delta.text
         onChunk(text)
       }

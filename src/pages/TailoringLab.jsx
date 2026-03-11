@@ -313,7 +313,7 @@ export default function TailoringLab() {
   const [coverLetter, setCoverLetter]   = useState('')
   const [questions, setQuestions]       = useState([])
   const [answers, setAnswers]           = useState({})
-  const [activeDocTab, setActiveDocTab] = useState('cv')
+  const [activeDocTab, setActiveDocTab] = useState(location.state?.openTab ?? 'cv')
   const [viewMode, setViewMode]         = useState('preview') // 'preview' | 'edit'
   const [error, setError]               = useState(null)
   const [addedToTracker, setAddedToTracker] = useState(false)

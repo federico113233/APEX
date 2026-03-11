@@ -231,7 +231,7 @@ function ChatBubble({ role, text, isStreaming }) {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           boxShadow: '0 2px 8px rgba(37,99,235,0.2)',
         }}>
-          <span style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>A</span>
+          <img src="/apex_x_blue.png" alt="Alex" style={{ height: 16, width: 'auto', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
         </div>
         <div style={{
           padding: '13px 18px', background: '#F1F5F9',
@@ -273,7 +273,7 @@ function TypingIndicator() {
         background: 'linear-gradient(135deg,#2563EB,#38BDF8)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <span style={{ color: '#fff', fontSize: 12, fontWeight: 800 }}>A</span>
+        <img src="/apex_x_blue.png" alt="Alex" style={{ height: 16, width: 'auto', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
       </div>
       <div style={{
         padding: '14px 18px', background: '#F1F5F9',

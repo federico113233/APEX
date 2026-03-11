@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useUser } from '../context/UserContext'
 
 export default function AddJobModal({ onClose, onAdded }) {
   const { addManualJob } = useUser()
+  const navigate = useNavigate()
   const [visible, setVisible] = useState(false)
   const [title, setTitle]           = useState('')
   const [company, setCompany]       = useState('')
@@ -26,11 +28,11 @@ export default function AddJobModal({ onClose, onAdded }) {
     return e
   }
 
-  const handleSubmit = async () => {
+  const save = async () => {
     const e = validate()
-    if (Object.keys(e).length) { setErrors(e); return }
+    if (Object.keys(e).length) { setErrors(e); return null }
     setLoading(true)
-    await addManualJob({
+    const result = await addManualJob({
       title: title.trim(),
       company: company.trim(),
       location: location.trim(),
@@ -38,8 +40,36 @@ export default function AddJobModal({ onClose, onAdded }) {
       jobUrl: jobUrl.trim(),
     })
     setLoading(false)
+    if (result?.error) {
+      setErrors({ submit: 'Failed to save. Check your connection and try again.' })
+      return null
+    }
+    return result
+  }
+
+  const handleSaveToTracker = async () => {
+    const result = await save()
+    if (!result) return
     onAdded?.()
     handleClose()
+  }
+
+  const handleTailorWithAI = async () => {
+    const result = await save()
+    if (!result) return
+    handleClose()
+    navigate('/dashboard/tailoring-lab', {
+      state: {
+        job: {
+          id: result.jobId,
+          title: title.trim(),
+          company: company.trim(),
+          location: location.trim(),
+          description: description.trim(),
+          url: jobUrl.trim(),
+        },
+      },
+    })
   }
 
   const inputStyle = {
@@ -218,10 +248,42 @@ export default function AddJobModal({ onClose, onAdded }) {
           />
         </div>
 
+        {/* Submit error */}
+        {errors.submit && (
+          <p style={{ margin: '-12px 0 16px', fontSize: 13, color: '#ef4444', textAlign: 'center' }}>
+            {errors.submit}
+          </p>
+        )}
+
         {/* Buttons */}
         <div style={{ display: 'flex', gap: 10 }}>
           <button
-            onClick={handleSubmit}
+            onClick={handleSaveToTracker}
+            disabled={loading}
+            style={{
+              flex: 1,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              padding: '11px 20px',
+              borderRadius: 12, border: '1.5px solid #e2e8f0',
+              background: '#fff', color: '#475569', fontSize: 14, fontWeight: 500,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.7 : 1,
+              transition: 'background 0.15s, opacity 0.15s',
+            }}
+            onMouseEnter={(e) => { if (!loading) e.currentTarget.style.background = '#f8fafc' }}
+            onMouseLeave={(e) => { if (!loading) e.currentTarget.style.background = '#fff' }}
+          >
+            {loading ? (
+              <span style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid #cbd5e1', borderTopColor: '#64748b', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
+            ) : (
+              <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            )}
+            Save to Tracker
+          </button>
+          <button
+            onClick={handleTailorWithAI}
             disabled={loading}
             style={{
               flex: 1,
@@ -238,27 +300,11 @@ export default function AddJobModal({ onClose, onAdded }) {
             onMouseEnter={(e) => { if (!loading) e.currentTarget.style.opacity = '0.9' }}
             onMouseLeave={(e) => { if (!loading) e.currentTarget.style.opacity = '1' }}
           >
-            {loading ? (
-              <span style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
-            ) : (
-              <svg width="16" height="16" fill="none" stroke="#fff" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-            )}
-            Add to APEX
-          </button>
-          <button
-            onClick={handleClose}
-            style={{
-              padding: '11px 20px',
-              borderRadius: 12, border: '1.5px solid #e2e8f0',
-              background: '#fff', color: '#64748b', fontSize: 14, fontWeight: 500, cursor: 'pointer',
-              transition: 'background 0.15s',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = '#f8fafc' }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = '#fff' }}
-          >
-            Cancel
+            <svg width="15" height="15" fill="none" stroke="#fff" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            Tailor with AI →
           </button>
         </div>
       </div>

@@ -134,9 +134,16 @@ function Sidebar() {
                           : '0 1px 4px rgba(37,99,235,0.25)',
                       }}
                     >
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="white">
-                        <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" />
-                      </svg>
+                      <img
+                        src="/apex_x_blue.png"
+                        alt=""
+                        style={{
+                          width: 12,
+                          height: 12,
+                          objectFit: 'contain',
+                          filter: 'brightness(0) invert(1)',
+                        }}
+                      />
                     </span>
                   ) : (
                     <svg

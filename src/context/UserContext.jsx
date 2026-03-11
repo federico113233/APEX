@@ -313,9 +313,10 @@ export function UserProvider({ children }) {
         })
       if (error) {
         console.error('[Supabase] addManualJob error:', error)
-      } else {
-        await loadApplications(userId)
+        return { error, jobId: null }
       }
+      await loadApplications(userId)
+      return { error: null, jobId }
     } else {
       const appliedDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
       setApplications((prev) => [{
@@ -324,6 +325,7 @@ export function UserProvider({ children }) {
         status: 'Applied', tailoredCv: '', coverLetter: '',
         notes: '', matchScore: 0, appliedDate, manual: true,
       }, ...prev])
+      return { error: null, jobId }
     }
   }
 

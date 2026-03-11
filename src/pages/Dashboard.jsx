@@ -1,31 +1,22 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import Anthropic from '@anthropic-ai/sdk'
 import { useUser } from '../context/UserContext'
 
-const MODEL = 'claude-sonnet-4-20250514'
+const ALEX_MESSAGES = [
+  "62% of students spend 30+ minutes on one application. Let's fix that.",
+  "Most candidates apply and hope. You prepare and win.",
+  "Your next career move starts with the right words.",
+  "Recruiters spend 6 seconds on a CV. Make every one count.",
+  "Not automation. Amplification. There's a difference.",
+  "Your experience is real. Let's make sure they see it.",
+  "The job you want is one good application away.",
+  "97% of students want AI help with applications. The other 3% haven't tried yet.",
+  "Career advice that doesn't sound like LinkedIn.",
+  "I've read your CV. I have thoughts. Good ones.",
+]
 
-function getClient() {
-  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
-  if (!apiKey) return null
-  return new Anthropic({ apiKey, dangerouslyAllowBrowser: true })
-}
-
-async function fetchAlexMessage(user, applications, drafts) {
-  const client = getClient()
-  if (!client) return ''
-  const appsList = applications.slice(0, 8).map(a => `- ${a.title} at ${a.company} (${a.status})`).join('\n')
-  const msg = await client.messages.create({
-    model: MODEL,
-    max_tokens: 72,
-    system: `You are Alex, an AI career advisor. Write exactly 1-2 concise sentences for a dashboard greeting card. Be specific to the user's actual data. No pleasantries, no greetings, no emoji, no "I". Start directly with an insight or action. Examples: "Your interview at Tradex is coming up — let's make sure you're ready." or "Three rejections in a row often signal a CV issue — I spotted a pattern worth discussing."`,
-    messages: [{
-      role: 'user',
-      content: `Name: ${user.name || 'Student'}\nApplications:\n${appsList || 'None'}\nDrafts in progress: ${drafts?.length || 0}\nCV available: ${!!user.cvText}`,
-    }],
-  })
-  return msg.content?.[0]?.text?.trim() || ''
-}
+const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000)
+const todayAlexMessage = ALEX_MESSAGES[dayOfYear % ALEX_MESSAGES.length]
 
 const STATUS_STYLE = {
   Applied:   { background: '#EFF6FF', color: '#2563EB' },
@@ -126,25 +117,7 @@ export default function Dashboard() {
   ].join(' · ')
 
   // Alex card message
-  const [alexMsg, setAlexMsg]         = useState('')
-  const [alexLoading, setAlexLoading] = useState(true)
-  const [alexHov, setAlexHov]         = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-    const run = async () => {
-      try {
-        const msg = await fetchAlexMessage(user, applications, drafts)
-        if (!cancelled) setAlexMsg(msg)
-      } catch {
-        if (!cancelled) setAlexMsg('Ready to help with your job search. Let\'s talk strategy.')
-      } finally {
-        if (!cancelled) setAlexLoading(false)
-      }
-    }
-    run()
-    return () => { cancelled = true }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const [alexHov, setAlexHov] = useState(false)
 
   // Fade-in animation trigger
   const [ready, setReady] = useState(false)
@@ -161,13 +134,6 @@ export default function Dashboard() {
 
   return (
     <>
-      <style>{`
-        @keyframes dash-pulse {
-          0%, 100% { opacity: 0.5; }
-          50% { opacity: 1; }
-        }
-      `}</style>
-
       <div style={{ background: '#F8FAFC', minHeight: '100vh' }}>
 
         {/* ── HERO ── */}
@@ -290,31 +256,17 @@ export default function Dashboard() {
                 </p>
 
                 {/* Message */}
-                <div style={{ marginBottom: 22, minHeight: 42 }}>
-                  {alexLoading ? (
-                    <div style={{ display: 'flex', gap: 5, alignItems: 'center', paddingTop: 4 }}>
-                      {[0, 150, 300].map(d => (
-                        <span key={d} style={{
-                          width: 6, height: 6, borderRadius: '50%',
-                          background: 'rgba(255,255,255,0.55)',
-                          display: 'inline-block',
-                          animation: `dash-pulse 1.2s infinite ease-in-out`,
-                          animationDelay: `${d}ms`,
-                        }} />
-                      ))}
-                    </div>
-                  ) : (
-                    <p style={{
-                      margin: 0,
-                      fontSize: 15.5,
-                      fontWeight: 500,
-                      color: '#fff',
-                      lineHeight: 1.55,
-                      letterSpacing: '-0.005em',
-                    }}>
-                      {alexMsg || 'Ready to help with your job search. Let\'s talk strategy.'}
-                    </p>
-                  )}
+                <div style={{ marginBottom: 22 }}>
+                  <p style={{
+                    margin: 0,
+                    fontSize: 15.5,
+                    fontWeight: 500,
+                    color: '#fff',
+                    lineHeight: 1.55,
+                    letterSpacing: '-0.005em',
+                  }}>
+                    {todayAlexMessage}
+                  </p>
                 </div>
 
                 {/* CTA Button */}

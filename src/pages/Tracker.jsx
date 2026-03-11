@@ -522,6 +522,51 @@ function CalendarModal({ app, onClose, onAdded }) {
   )
 }
 
+// ── "Job added" toast ─────────────────────────────────────────────────────────
+function JobAddedToast({ onHide }) {
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    requestAnimationFrame(() => setVisible(true))
+    const t = setTimeout(() => {
+      setVisible(false)
+      setTimeout(onHide, 320)
+    }, 3500)
+    return () => clearTimeout(t)
+  }, [onHide])
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        bottom: 28,
+        left: '50%',
+        transform: visible ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(20px)',
+        opacity: visible ? 1 : 0,
+        transition: 'transform 0.32s cubic-bezier(0.34,1.56,0.64,1), opacity 0.22s',
+        zIndex: 200,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '12px 20px',
+        borderRadius: 14,
+        background: '#fff',
+        border: '1.5px solid #bfdbfe',
+        boxShadow: '0 8px 32px rgba(37,99,235,0.18), 0 0 0 1px rgba(37,99,235,0.08)',
+        fontSize: 14,
+        fontWeight: 600,
+        color: '#1d4ed8',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <svg width="18" height="18" fill="none" stroke="#2563eb" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+      </svg>
+      Job added successfully
+    </div>
+  )
+}
+
 // ── Toast notification ─────────────────────────────────────────────────────────
 function CalendarToast({ onHide }) {
   const [visible, setVisible] = useState(false)
@@ -796,10 +841,48 @@ function DetailPanel({ app, onClose, onStatusChange, onNotesChange, onDelete }) 
                 </div>
               </div>
             ) : (
-              <EmptyTab
-                icon="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                hint='No cover letter saved. Use the Tailoring Lab and click "Add to Tracker".'
-              />
+              app.manual ? (
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, textAlign: 'center', minHeight: 280 }}>
+                  <svg width="44" height="44" fill="none" stroke="#e2e8f0" viewBox="0 0 24 24" style={{ marginBottom: 12 }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  <p style={{ fontSize: 13, color: '#94a3b8', maxWidth: 280, lineHeight: 1.5, marginBottom: 20 }}>
+                    No cover letter yet. Generate one with AI in the Tailoring Lab.
+                  </p>
+                  <button
+                    onClick={() => {
+                      onClose()
+                      navigate('/dashboard/tailoring-lab', {
+                        state: {
+                          job: { id: app.jobId, title: app.title, company: app.company, location: app.location, description: app.description, url: app.jobUrl },
+                          openTab: 'cover',
+                        },
+                      })
+                    }}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 8,
+                      padding: '10px 20px', borderRadius: 10, border: 'none',
+                      background: 'linear-gradient(135deg, #2563EB, #38BDF8)',
+                      color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                      boxShadow: '0 2px 10px rgba(37,99,235,0.25)',
+                      transition: 'opacity 0.15s',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.opacity = '1' }}
+                  >
+                    <svg width="14" height="14" fill="none" stroke="#fff" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Tailor this job →
+                  </button>
+                </div>
+              ) : (
+                <EmptyTab
+                  icon="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                  hint='No cover letter saved. Use the Tailoring Lab and click "Add to Tracker".'
+                />
+              )
             )
           )}
 
@@ -966,8 +1049,9 @@ function EmptyTab({ icon, hint }) {
 // ── Main Tracker ──────────────────────────────────────────────────────────────
 function Tracker() {
   const { applications, updateStatus, updateApplicationNotes, deleteApplication } = useUser()
-  const [selected, setSelected]     = useState(null)
+  const [selected, setSelected]       = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showJobAddedToast, setShowJobAddedToast] = useState(false)
 
   const counts = STATUSES.reduce((acc, s) => {
     acc[s] = applications.filter((a) => a.status === s).length
@@ -1104,8 +1188,12 @@ function Tracker() {
       {showAddModal && (
         <AddJobModal
           onClose={() => setShowAddModal(false)}
-          onAdded={() => {}}
+          onAdded={() => setShowJobAddedToast(true)}
         />
+      )}
+
+      {showJobAddedToast && (
+        <JobAddedToast onHide={() => setShowJobAddedToast(false)} />
       )}
     </>
   )

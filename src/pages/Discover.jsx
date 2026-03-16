@@ -853,7 +853,7 @@ export default function Discover() {
 
   return (
   <>
-    <div className="p-4 md:p-8 page-fade-in">
+    <div className="p-4 md:p-8 page-fade-in flex flex-col md:h-screen">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900">Discover</h1>
@@ -1071,54 +1071,59 @@ export default function Discover() {
         )}
       </div>
 
-      {/* Search context banner */}
-      {banner && !loading && (
-        <div className="flex items-center gap-2 px-4 py-2.5 mb-5 bg-blue-50 border border-blue-100 rounded-xl text-sm">
-          <svg className="w-4 h-4 text-apex-blue flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <span className="text-apex-blue font-medium">Results for:</span>
-          <span className="text-apex-text">{banner.text}</span>
-          <span className="ml-auto text-apex-muted flex-shrink-0">
-            {displayedJobs.length !== jobs.length
-              ? `${displayedJobs.length} of ${jobs.length} jobs`
-              : `${jobs.length} jobs`}
-          </span>
-        </div>
-      )}
+      {/* Scrollable results area */}
+      <div className="flex-1 overflow-y-auto md:pr-1">
 
-      {/* Results */}
-      <div className="space-y-4">
-        {loading && Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
-
-        {!loading && error && (
-          <div className="text-center py-16 bg-white rounded-xl border border-slate-200">
-            <svg className="w-10 h-10 mx-auto mb-3 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        {/* Search context banner */}
+        {banner && !loading && (
+          <div className="flex items-center gap-2 px-4 py-2.5 mb-5 bg-blue-50 border border-blue-100 rounded-xl text-sm">
+            <svg className="w-4 h-4 text-apex-blue flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
-            <p className="text-apex-muted text-sm mb-4">{error}</p>
-            <button onClick={() => fetchJobs()}
-              className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95">
-              Retry
-            </button>
+            <span className="text-apex-blue font-medium">Results for:</span>
+            <span className="text-apex-text">{banner.text}</span>
+            <span className="ml-auto text-apex-muted flex-shrink-0">
+              {displayedJobs.length !== jobs.length
+                ? `${displayedJobs.length} of ${jobs.length} jobs`
+                : `${jobs.length} jobs`}
+            </span>
           </div>
         )}
 
-        {!loading && !error && displayedJobs.length === 0 && (
-          <EmptyState onReset={handleReset} />
-        )}
+        {/* Results */}
+        <div className="space-y-4 pb-4">
+          {loading && Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
 
-        {!loading && displayedJobs.map(job => (
-          <JobCard
-            key={job.id}
-            job={job}
-            applied={appliedIds.has(job.id)}
-            onApply={handleApplyJob}
-            onTailor={j => navigate('/dashboard/tailoring-lab', { state: { job: j } })}
-            expanded={expandedId === job.id}
-            onToggle={() => handleToggleJob(job)}
-          />
-        ))}
+          {!loading && error && (
+            <div className="text-center py-16 bg-white rounded-xl border border-slate-200">
+              <svg className="w-10 h-10 mx-auto mb-3 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <p className="text-apex-muted text-sm mb-4">{error}</p>
+              <button onClick={() => fetchJobs()}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95">
+                Retry
+              </button>
+            </div>
+          )}
+
+          {!loading && !error && displayedJobs.length === 0 && (
+            <EmptyState onReset={handleReset} />
+          )}
+
+          {!loading && displayedJobs.map(job => (
+            <JobCard
+              key={job.id}
+              job={job}
+              applied={appliedIds.has(job.id)}
+              onApply={handleApplyJob}
+              onTailor={j => navigate('/dashboard/tailoring-lab', { state: { job: j } })}
+              expanded={expandedId === job.id}
+              onToggle={() => handleToggleJob(job)}
+            />
+          ))}
+        </div>
+
       </div>
     </div>
 

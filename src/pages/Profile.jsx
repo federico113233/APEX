@@ -496,7 +496,10 @@ function SummaryCard({ icon, title, subtitle, badge, onClick }) {
 
 export default function Profile() {
   const { user } = useUser()
-  const [openModal, setOpenModal] = useState(null)
+  const [openModal, setOpenModal] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('apex_profile_state') || '{}').openModal || null }
+    catch { return null }
+  })
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
 
   useEffect(() => {
@@ -504,6 +507,12 @@ export default function Profile() {
     window.addEventListener('resize', handler)
     return () => window.removeEventListener('resize', handler)
   }, [])
+
+  // Persist modal state so it's restored when navigating back to Profile
+  useEffect(() => {
+    try { localStorage.setItem('apex_profile_state', JSON.stringify({ openModal })) }
+    catch {}
+  }, [openModal])
 
   const cvText   = user.cvText || ''
   const langCount = (user.languages || []).filter((l) => l.lang?.trim()).length

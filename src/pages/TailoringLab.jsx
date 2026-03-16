@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useLayoutEffect } from 'react'
+import { useState, useEffect, useRef, useLayoutEffect, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   Document, Packer, Paragraph, TextRun,
@@ -24,6 +24,21 @@ STRICT RULES:
 - Rewrite bullet points with strong action verbs and quantifiable results where possible
 - If information is missing or unclear, ask the student targeted clarifying questions BEFORE generating
 
+CV TAILORING HIERARCHY — apply this logic to every experience, project, or activity:
+
+TIER 1 — Core experiences: directly relevant to this specific role and company.
+Action: Keep fully, expand bullet points to 4-5, emphasize keywords from the job description.
+
+TIER 2 — Transferable experiences: not identical to the role but demonstrate applicable skills (leadership, coordination, international exposure, budget management, communication, etc.).
+Action: Keep but compress to 2-3 bullet points maximum. Never eliminate entirely — transferable skills matter to recruiters.
+
+TIER 3 — Low relevance experiences: no meaningful skill overlap with the target role.
+Action: If CV fits in one page, compress to 1 line only (role + company + dates, no bullets). If CV still exceeds one page after compression, remove entirely — but only as last resort.
+
+THE ONE PAGE RULE: A tailored CV must never exceed one page. Apply compression in this order: first compress Tier 3, then Tier 2, never Tier 1. If still too long, remove Tier 3 entirely before touching Tier 2.
+
+NEVER remove an experience without documenting it in the changelog. The candidate must always know what was changed and why.
+
 COVER LETTER — THREE-QUESTION FRAMEWORK:
 A great cover letter must implicitly answer three questions, woven naturally into the narrative without explicit section headers or labels:
 
@@ -35,15 +50,29 @@ A great cover letter must implicitly answer three questions, woven naturally int
 
 These three elements must be present and interwoven naturally. The cover letter should read as a coherent personal narrative, not as three separate answers. Never use these as section titles or explicit labels.
 
+COVER LETTER STRUCTURE (MANDATORY):
+The cover letter MUST always include all four of these parts — never skip any:
+1. Strong opening paragraph that hooks the reader immediately (NEVER skip or abbreviate this)
+2. 2-3 body paragraphs that weave in the three-question framework naturally
+3. Closing paragraph with a clear, confident call to action
+The opening paragraph is non-negotiable — it must always be present and strong.
+
 COVER LETTER QUALITY RULES:
 - First sentence must be strong and specific — NEVER start with "I am writing to apply for..."
 - Tone: confident but not arrogant, personal but professional
-- Length: 250-350 words maximum
+- Length: 350-450 words. Never sacrifice quality or completeness for brevity.
 - Every claim must be grounded in the candidate's actual CV — never invent or embellish
 - End with a clear, confident call to action
 
 OUTPUT FORMAT:
 First output the tailored CV in clean format.
+Then output exactly this separator: |||CHANGES|||
+Then output the structured changelog using ONLY these prefixes, one item per line:
+EXPANDED: [experience name] — [why: directly relevant for this role, which skills emphasized]
+COMPRESSED: [experience name] — [why: transferable skills kept, what was reduced]
+REMOVED: [experience name] — [why: no meaningful skill overlap, removed to fit one page]
+REWRITTEN: [section name] — [what changed and why]
+Maximum 6 changelog items. Always explain WHY in plain language. Write changelog in the same language as the CV. Tone: direct and helpful, like a career advisor explaining their choices.
 Then output exactly this separator: |||COVER_LETTER|||
 Then output the cover letter.
 Then output exactly this separator: |||QUESTIONS|||
@@ -102,15 +131,28 @@ ${job.description || 'Not provided'}`
 }
 
 function parseResponse(raw) {
-  const [cvPart = '', rest = ''] = raw.split('|||COVER_LETTER|||')
-  const [coverPart = '', qPart = ''] = rest.split('|||QUESTIONS|||')
+  // CV section may contain a |||CHANGES||| block before |||COVER_LETTER|||
+  const [cvAndChanges = '', afterCV = ''] = raw.split('|||COVER_LETTER|||')
+  const [cvPart = '', changesPart = ''] = cvAndChanges.split('|||CHANGES|||')
+  const [coverPart = '', qPart = ''] = afterCV.split('|||QUESTIONS|||')
 
   const questions = qPart
     .split('\n')
     .map((l) => l.replace(/^[\d.\-*•]\s*/, '').trim())
     .filter((l) => l.length > 10 && !/^(none|n\/a|no questions?)\.?$/i.test(l))
 
-  return { cv: cvPart.trim(), cover: coverPart.trim(), questions }
+  const changes = changesPart
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => /^(EXPANDED|COMPRESSED|REMOVED|REWRITTEN):/.test(l))
+    .map((l) => {
+      const m = l.match(/^(EXPANDED|COMPRESSED|REMOVED|REWRITTEN):\s*(.+)/)
+      return m ? { type: m[1], text: m[2].trim() } : null
+    })
+    .filter(Boolean)
+    .slice(0, 6)
+
+  return { cv: cvPart.trim(), cover: coverPart.trim(), questions, changes }
 }
 
 function parseInline(text, baseSize = 22) {
@@ -345,7 +387,11 @@ export default function TailoringLab() {
   const [coverLetter, setCoverLetter]   = useState('')
   const [questions, setQuestions]       = useState([])
   const [answers, setAnswers]           = useState({})
-  const [activeDocTab, setActiveDocTab] = useState(location.state?.openTab ?? 'cv')
+  const [activeDocTab, setActiveDocTab] = useState(() => {
+    if (location.state?.openTab) return location.state.openTab
+    try { return JSON.parse(localStorage.getItem('apex_lab_state') || '{}').activeDocTab || 'cv' }
+    catch { return 'cv' }
+  })
   const [viewMode, setViewMode]         = useState('preview') // 'preview' | 'edit'
   const [error, setError]               = useState(null)
   const [addedToTracker, setAddedToTracker] = useState(false)
@@ -356,6 +402,8 @@ export default function TailoringLab() {
   const [alexInput, setAlexInput]         = useState('')
   const [alexLoading, setAlexLoading]     = useState(false)
   const [alexBanner, setAlexBanner]       = useState(null) // { text, prevCv, prevCover }
+  const [changelog, setChangelog]         = useState([])   // [{ type, text }]
+  const [changelogOpen, setChangelogOpen] = useState(false)
   const ALEX_PILLS = ['Make it more concise', 'Add more impact', 'Match keywords better', 'Adjust tone']
 
   // Accordion height for job description
@@ -365,6 +413,56 @@ export default function TailoringLab() {
     if (!descInnerRef.current) return
     setDescHeight(descExpanded ? descInnerRef.current.scrollHeight : 0)
   }, [descExpanded])
+
+  // ── State persistence ──────────────────────────────────────────────────────
+  const scrollRef      = useRef(null)
+  const scrollTimerRef = useRef(null)
+  const restoredRef    = useRef(false)
+
+  // Save activeDocTab whenever it changes
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('apex_lab_state') || '{}')
+      localStorage.setItem('apex_lab_state', JSON.stringify({ ...saved, activeDocTab }))
+    } catch {}
+  }, [activeDocTab])
+
+  // Restore scroll position once phase becomes 'done' (content is in DOM)
+  useEffect(() => {
+    if (phase === 'done' && scrollRef.current && !restoredRef.current) {
+      restoredRef.current = true
+      try {
+        const { scrollTop } = JSON.parse(localStorage.getItem('apex_lab_state') || '{}')
+        if (scrollTop) scrollRef.current.scrollTop = scrollTop
+      } catch {}
+    }
+  }, [phase])
+
+  // Re-sync scroll when coming back to this browser tab
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState === 'visible' && scrollRef.current) {
+        try {
+          const { scrollTop } = JSON.parse(localStorage.getItem('apex_lab_state') || '{}')
+          if (scrollTop !== undefined) scrollRef.current.scrollTop = scrollTop
+        } catch {}
+      }
+    }
+    document.addEventListener('visibilitychange', handler)
+    return () => document.removeEventListener('visibilitychange', handler)
+  }, [])
+
+  const handleDocScroll = useCallback(() => {
+    clearTimeout(scrollTimerRef.current)
+    scrollTimerRef.current = setTimeout(() => {
+      if (scrollRef.current) {
+        try {
+          const saved = JSON.parse(localStorage.getItem('apex_lab_state') || '{}')
+          localStorage.setItem('apex_lab_state', JSON.stringify({ ...saved, scrollTop: scrollRef.current.scrollTop }))
+        } catch {}
+      }
+    }, 200)
+  }, [])
 
   // ── Load saved answers + auto-generate on mount ────────────────────────────
   useEffect(() => {
@@ -470,6 +568,8 @@ export default function TailoringLab() {
       setTailoredCV(parsed.cv)
       setCoverLetter(parsed.cover)
       setQuestions(parsed.questions)
+      setChangelog(parsed.changes)
+      setChangelogOpen(false)
       setPhase('done')
       if (parsed.cv) posthog.capture('cv_generated', { job_title: activeJob?.title, company: activeJob?.company })
       if (parsed.cover) posthog.capture('cover_letter_generated', { job_title: activeJob?.title, company: activeJob?.company })
@@ -531,6 +631,8 @@ export default function TailoringLab() {
     setAddedToTracker(false)
     setAnswers({})
     setQuestions([])
+    setChangelog([])
+    setChangelogOpen(false)
     setDescExpanded(false)
     setMainTab('new')
   }
@@ -593,6 +695,7 @@ export default function TailoringLab() {
   }
 
   const handleChangeJob = () => {
+    localStorage.removeItem('apex_lab_state')
     abortRef.current?.abort?.()
     setActiveJob(null)
     setTailoredCV('')
@@ -605,7 +708,7 @@ export default function TailoringLab() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="p-4 md:p-8 page-fade-in flex flex-col min-h-0">
+    <div className="p-4 md:p-8 page-fade-in flex flex-col md:h-screen md:overflow-hidden">
       {/* Header */}
       <div className="mb-5 flex-shrink-0">
         <h1 className="text-2xl font-bold text-slate-900">Tailoring Lab</h1>
@@ -696,10 +799,10 @@ export default function TailoringLab() {
             })()
           ) : (
             /* ── Two-column layout ── */
-            <div className="flex flex-col md:flex-row gap-6 flex-1 min-h-0">
+            <div className="flex flex-col md:flex-row gap-6 flex-1 min-h-0 md:overflow-hidden">
 
               {/* ─ LEFT COLUMN (35%) ─ */}
-              <div className="w-full md:w-80 flex-shrink-0 flex flex-col gap-4">
+              <div className="w-full md:w-80 flex-shrink-0 flex flex-col gap-4 md:overflow-y-auto">
 
                 {/* Job info card */}
                 <div className="bg-white rounded-xl border border-slate-200 p-5">
@@ -887,7 +990,7 @@ export default function TailoringLab() {
               </div>
 
               {/* ─ RIGHT COLUMN (flex-1) ─ */}
-              <div className="flex-1 min-w-0 flex flex-col">
+              <div className="flex-1 min-w-0 flex flex-col md:overflow-hidden">
 
                 {/* Generating */}
                 {phase === 'generating' && <LoadingCard streamText={streamText} />}
@@ -952,12 +1055,55 @@ export default function TailoringLab() {
                     </div>
 
                     {/* Preview or Edit */}
-                    <div className="flex-1 overflow-y-auto">
+                    <div className="flex-1 overflow-y-auto" ref={scrollRef} onScroll={handleDocScroll}>
                       {viewMode === 'preview' ? (
                         <div className="p-6">
                           <MarkdownContent
                             text={activeDocTab === 'cv' ? tailoredCV : coverLetter}
                           />
+                          {/* Changelog panel — CV tab only */}
+                          {activeDocTab === 'cv' && changelog.length > 0 && (
+                            <div className="mt-6 rounded-xl border border-slate-200 overflow-hidden">
+                              <button
+                                onClick={() => setChangelogOpen(o => !o)}
+                                className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors text-left"
+                              >
+                                <span className="text-[13px] font-semibold text-slate-700">
+                                  {/^[A-Z]/.test(changelog[0]?.text?.slice(0, 2) ?? '') && changelog[0]?.text?.match(/[àèìòùÀÈÌÒÙ]/)
+                                    ? 'Cosa ha modificato Alex'
+                                    : 'What Alex changed'}
+                                </span>
+                                <svg
+                                  className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${changelogOpen ? 'rotate-180' : ''}`}
+                                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                >
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </button>
+                              {changelogOpen && (
+                                <div className="divide-y divide-slate-100">
+                                  {changelog.map((item, i) => {
+                                    const dot = {
+                                      EXPANDED:   '#16A34A',
+                                      COMPRESSED: '#D97706',
+                                      REMOVED:    '#DC2626',
+                                      REWRITTEN:  '#2563EB',
+                                    }[item.type] ?? '#94A3B8'
+                                    return (
+                                      <div key={i} className="flex items-start gap-3 px-4 py-3">
+                                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: dot, flexShrink: 0, marginTop: 4 }} />
+                                        <p className="text-[13px] text-slate-600 leading-relaxed">
+                                          <span className="font-semibold text-slate-800">{item.type.charAt(0) + item.type.slice(1).toLowerCase()}</span>
+                                          {': '}
+                                          {item.text}
+                                        </p>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="p-5 h-full">

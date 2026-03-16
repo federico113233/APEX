@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import posthog from 'posthog-js'
 
 const UserContext = createContext(null)
 
@@ -187,6 +188,13 @@ export function UserProvider({ children }) {
           seedOnboardedFromCache(session.user.id)
 
           if (event === 'SIGNED_IN') {
+            posthog.identify(session.user.id, {
+              email: session.user.email,
+              name: session.user.user_metadata?.full_name,
+            })
+            const isNewUser = new Date() - new Date(session.user.created_at) < 60000
+            if (isNewUser) posthog.capture('user_signed_up')
+
             setProfileLoaded(false)
             Promise.all([
               loadProfile(session.user.id),
@@ -200,6 +208,7 @@ export function UserProvider({ children }) {
             resolve()
           }
         } else {
+          posthog.reset()
           setUser(DEFAULT_USER)
           setProfileLoaded(false)
           setApplications([])

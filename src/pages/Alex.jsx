@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useUser } from '../context/UserContext'
 import { supabase } from '../lib/supabase'
+import posthog from 'posthog-js'
 
 const MODEL = 'claude-sonnet-4-20250514'
 
@@ -529,6 +530,7 @@ export default function Alex() {
     const userMsg = { role: 'user', content: text }
     const newMsgs = [...messages, userMsg]
     setMessages(newMsgs)
+    posthog.capture('alex_message_sent', { conversation_length: newMsgs.length })
     setDisplayMsgs(prev => [...prev, { role: 'user', text }])
     setStreaming(true)
     setStreamText('')

@@ -6,11 +6,15 @@ import {
 } from 'docx'
 import { useUser } from '../context/UserContext'
 import { supabase } from '../lib/supabase'
+import posthog from 'posthog-js'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const MODEL = 'claude-sonnet-4-20250514'
 
 const SYSTEM_PROMPT = `You are an expert career coach and CV writer with 15 years of experience helping students land jobs at top companies. Your task is to tailor a student's CV and write a cover letter for a specific job posting.
+
+LANGUAGE DETECTION:
+Detect the primary language of the job description provided. Generate ALL outputs (tailored CV, cover letter, and interview questions) in that same language. For Italian job postings, write in professional Italian. For English job postings, write in professional English. When the language is mixed or uncertain, default to Italian (the primary target market).
 
 STRICT RULES:
 - NEVER invent experience, skills, or qualifications not present in the original CV
@@ -19,6 +23,24 @@ STRICT RULES:
 - Adapt the narrative tone to the company culture (startup=bold/results-driven, corporate=structured/methodical, creative=innovative/passionate)
 - Rewrite bullet points with strong action verbs and quantifiable results where possible
 - If information is missing or unclear, ask the student targeted clarifying questions BEFORE generating
+
+COVER LETTER — THREE-QUESTION FRAMEWORK:
+A great cover letter must implicitly answer three questions, woven naturally into the narrative without explicit section headers or labels:
+
+1. WHY THIS COMPANY: Show genuine knowledge of the company — reference their industry, mission, recent work, or culture. Never generic praise. If company info is available in the job description, use it specifically.
+
+2. WHY ME: Connect the candidate's unique background and specific experiences directly to what this company needs. Highlight what makes this candidate distinct, not just qualified.
+
+3. WHY THIS ROLE: Show genuine motivation for this specific position (not just any job). Connect the role to the candidate's trajectory and ambitions.
+
+These three elements must be present and interwoven naturally. The cover letter should read as a coherent personal narrative, not as three separate answers. Never use these as section titles or explicit labels.
+
+COVER LETTER QUALITY RULES:
+- First sentence must be strong and specific — NEVER start with "I am writing to apply for..."
+- Tone: confident but not arrogant, personal but professional
+- Length: 250-350 words maximum
+- Every claim must be grounded in the candidate's actual CV — never invent or embellish
+- End with a clear, confident call to action
 
 OUTPUT FORMAT:
 First output the tailored CV in clean format.
@@ -416,6 +438,7 @@ export default function TailoringLab() {
     setPhase('generating')
     setStreamText('')
     setError(null)
+    posthog.capture('tailoring_started', { job_title: activeJob?.title, company: activeJob?.company })
 
     const controller = new AbortController()
     abortRef.current = controller
@@ -448,6 +471,8 @@ export default function TailoringLab() {
       setCoverLetter(parsed.cover)
       setQuestions(parsed.questions)
       setPhase('done')
+      if (parsed.cv) posthog.capture('cv_generated', { job_title: activeJob?.title, company: activeJob?.company })
+      if (parsed.cover) posthog.capture('cover_letter_generated', { job_title: activeJob?.title, company: activeJob?.company })
 
       // Auto-save draft
       await persistDraft(parsed.cv, parsed.cover)
@@ -471,6 +496,7 @@ export default function TailoringLab() {
       const label = type === 'cv' ? 'CV' : 'Cover_Letter'
       const company = activeJob?.company?.replace(/\s+/g, '_') || 'Company'
       await downloadDocx(text, `${label}_${company}.docx`, type === 'cv', user.name)
+      if (type === 'cv') posthog.capture('cv_downloaded', { job_title: activeJob?.title, company: activeJob?.company })
     } catch (err) {
       console.error('[TailoringLab] Download error:', err)
     } finally {
@@ -485,6 +511,7 @@ export default function TailoringLab() {
       await deleteDraft(activeDraftId)
       setActiveDraftId(null)
     }
+    posthog.capture('added_to_tracker_from_lab', { job_title: activeJob?.title, company: activeJob?.company })
     setAddedToTracker(true)
   }
 

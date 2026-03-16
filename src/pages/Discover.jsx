@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useLayoutEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../context/UserContext'
 import AddJobModal from '../components/AddJobModal'
+import posthog from 'posthog-js'
 
 // ─── Search history ──────────────────────────────────────────────────────────
 const HISTORY_KEY = 'apex_search_history'
@@ -744,6 +745,7 @@ export default function Discover() {
     if (kw.trim()) {
       saveToHistory(kw.trim())
       setSearchHistory(loadHistory())
+      posthog.capture('job_searched', { query: kw.trim(), country: filters.countryCode, sector: frontendFilters.sector || null })
     }
     setKeyword(kw)
     setActiveKeyword(kw)
@@ -779,6 +781,14 @@ export default function Discover() {
   const handleApplyJob = (job) => {
     addApplication(job, '', '', job.score || 0)
     setAppliedIds(prev => new Set([...prev, job.id]))
+  }
+
+  const handleToggleJob = (job) => {
+    const isOpening = expandedId !== job.id
+    setExpandedId(prev => prev === job.id ? null : job.id)
+    if (isOpening) {
+      posthog.capture('job_viewed', { job_title: job.title, company: job.company, match_score: job.score ?? null })
+    }
   }
 
   const handleReset = () => {
@@ -1106,7 +1116,7 @@ export default function Discover() {
             onApply={handleApplyJob}
             onTailor={j => navigate('/dashboard/tailoring-lab', { state: { job: j } })}
             expanded={expandedId === job.id}
-            onToggle={() => setExpandedId(prev => prev === job.id ? null : job.id)}
+            onToggle={() => handleToggleJob(job)}
           />
         ))}
       </div>
@@ -1115,7 +1125,7 @@ export default function Discover() {
     {showAddModal && (
       <AddJobModal
         onClose={() => setShowAddModal(false)}
-        onAdded={() => {}}
+        onAdded={() => posthog.capture('job_added_manually')}
       />
     )}
   </>

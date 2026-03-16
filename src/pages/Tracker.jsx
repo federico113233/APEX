@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import posthog from 'posthog-js'
 import {
   Document, Packer, Paragraph, TextRun,
   AlignmentType, Footer, PageNumber,
@@ -992,7 +993,7 @@ function DetailPanel({ app, onClose, onStatusChange, onNotesChange, onDelete }) 
         <CalendarModal
           app={app}
           onClose={() => setShowCalModal(false)}
-          onAdded={() => setShowToast(true)}
+          onAdded={() => { setShowToast(true); posthog.capture('calendar_event_added', { job_title: app.title, company: app.company }) }}
         />
       )}
 
@@ -1066,11 +1067,15 @@ function Tracker() {
   const handleStatusChange = async (appId, status) => {
     await updateStatus(appId, status)
     setSelected((prev) => prev?.id === appId ? { ...prev, status } : prev)
+    const app = applications.find((a) => a.id === appId)
+    posthog.capture('application_status_changed', { job_title: app?.title, company: app?.company, new_status: status })
   }
 
   const handleNotesChange = async (appId, notes) => {
     await updateApplicationNotes(appId, notes)
     setSelected((prev) => prev?.id === appId ? { ...prev, notes } : prev)
+    const app = applications.find((a) => a.id === appId)
+    posthog.capture('notes_saved', { job_title: app?.title })
   }
 
   // colors now driven by STATUS_COLORS

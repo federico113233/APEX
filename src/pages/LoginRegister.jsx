@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import posthog from 'posthog-js'
 
 function GoogleIcon() {
   return (
@@ -28,6 +29,7 @@ export default function LoginRegister() {
       options: { redirectTo: window.location.origin + '/dashboard' },
     })
     if (error) { setError(error.message); setLoadingGoogle(false) }
+    else posthog.capture('user_logged_in')
   }
 
   const handleMagicLink = async (e) => {
@@ -41,7 +43,7 @@ export default function LoginRegister() {
     })
     setLoadingMagic(false)
     if (error) setError(error.message)
-    else setMagicSent(true)
+    else { setMagicSent(true); posthog.capture('user_logged_in') }
   }
 
   return (

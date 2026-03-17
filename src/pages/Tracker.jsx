@@ -8,6 +8,21 @@ import {
 import { useUser } from '../context/UserContext'
 import AddJobModal from '../components/AddJobModal'
 
+// ─── State persistence ────────────────────────────────────────────────────────
+const TRACKER_KEY = 'apex_tracker_state'
+
+function loadTrackerState() {
+  try { return JSON.parse(localStorage.getItem(TRACKER_KEY)) || null }
+  catch { return null }
+}
+
+function saveTrackerState(patch) {
+  try {
+    const prev = JSON.parse(localStorage.getItem(TRACKER_KEY)) || {}
+    localStorage.setItem(TRACKER_KEY, JSON.stringify({ ...prev, ...patch }))
+  } catch { /* ignore storage errors */ }
+}
+
 const STATUSES = ['Applied', 'Interview', 'Offer', 'Rejected']
 
 const STATUS_COLORS = {
@@ -617,7 +632,11 @@ function CalendarToast({ onHide }) {
 function DetailPanel({ app, onClose, onStatusChange, onNotesChange, onDelete }) {
   const navigate                          = useNavigate()
   const [visible, setVisible]             = useState(false)
-  const [activeTab, setActiveTab]         = useState(app.tailoredCv ? 'cv' : app.coverLetter ? 'cover' : app.description ? 'details' : 'notes')
+  const [activeTab, setActiveTab]         = useState(() => {
+    const saved = loadTrackerState()?.activeTab
+    if (saved) return saved
+    return app.tailoredCv ? 'cv' : app.coverLetter ? 'cover' : app.description ? 'details' : 'notes'
+  })
   const [notes, setNotes]                 = useState(app.notes || '')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [savingNotes, setSavingNotes]     = useState(false)
@@ -630,6 +649,10 @@ function DetailPanel({ app, onClose, onStatusChange, onNotesChange, onDelete }) 
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true))
   }, [])
+
+  useEffect(() => {
+    saveTrackerState({ activeTab })
+  }, [activeTab])
 
   const handleNotesChange = (val) => {
     setNotes(val)
@@ -1054,6 +1077,21 @@ function Tracker() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [showJobAddedToast, setShowJobAddedToast] = useState(false)
 
+  // Restore selected application from localStorage after applications load
+  useEffect(() => {
+    if (!applications.length) return
+    const savedId = loadTrackerState()?.selectedId
+    if (!savedId) return
+    const app = applications.find(a => a.id === savedId)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (app) setSelected(app)
+  }, [applications]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist selected id whenever it changes
+  useEffect(() => {
+    saveTrackerState({ selectedId: selected?.id || null })
+  }, [selected])
+
   const counts = STATUSES.reduce((acc, s) => {
     acc[s] = applications.filter((a) => a.status === s).length
     return acc
@@ -1062,6 +1100,7 @@ function Tracker() {
   const handleDelete = async (appId) => {
     await deleteApplication(appId)
     setSelected(null)
+    saveTrackerState({ selectedId: null })
   }
 
   const handleStatusChange = async (appId, status) => {

@@ -3,6 +3,14 @@ import { useUser } from '../context/UserContext'
 import { supabase } from '../lib/supabase'
 import posthog from 'posthog-js'
 
+// ─── State persistence ────────────────────────────────────────────────────────
+const ALEX_KEY = 'apex_alex_state'
+
+function loadAlexState() {
+  try { return JSON.parse(localStorage.getItem(ALEX_KEY)) || null }
+  catch { return null }
+}
+
 const MODEL = 'claude-sonnet-4-20250514'
 
 const DYNAMIC_PHRASES = [
@@ -435,6 +443,12 @@ export default function Alex() {
   // Conversations
   const [conversations, setConversations] = useState([])
   const [activeConvId, setActiveConvId]   = useState(null)
+  const restoredConvRef = useRef(false)
+
+  // Save activeConvId to localStorage
+  useEffect(() => {
+    try { localStorage.setItem(ALEX_KEY, JSON.stringify({ activeConvId })) } catch {}
+  }, [activeConvId])
 
   // Load conversation list
   const loadConversations = async () => {
@@ -505,6 +519,16 @@ export default function Alex() {
       setStreamText('')
     }
   }
+
+  // Restore active conversation after list loads (declared after handleSelectConversation)
+  useEffect(() => {
+    if (!conversations.length || restoredConvRef.current) return
+    const savedId = loadAlexState()?.activeConvId
+    if (!savedId) return
+    restoredConvRef.current = true
+    const conv = conversations.find(c => c.id === savedId)
+    if (conv) handleSelectConversation(conv)
+  }, [conversations]) // eslint-disable-line
 
   const handleNew = () => {
     setMessages([])

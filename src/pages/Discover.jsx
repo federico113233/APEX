@@ -4,6 +4,14 @@ import { useUser } from '../context/UserContext'
 import AddJobModal from '../components/AddJobModal'
 import posthog from 'posthog-js'
 
+// ─── State persistence ───────────────────────────────────────────────────────
+const DISCOVER_KEY = 'apex_discover_state'
+
+function loadDiscoverState() {
+  try { return JSON.parse(localStorage.getItem(DISCOVER_KEY)) || null }
+  catch { return null }
+}
+
 // ─── Search history ──────────────────────────────────────────────────────────
 const HISTORY_KEY = 'apex_search_history'
 const MAX_HISTORY = 8
@@ -650,30 +658,33 @@ export default function Discover() {
   const navigate  = useNavigate()
   const abortRef  = useRef(null)
 
-  const [jobs, setJobs]           = useState([])
+  const savedDiscoverRef = useRef(loadDiscoverState())
+  const discoverSaveTimerRef = useRef(null)
+
+  const [jobs, setJobs]           = useState(() => savedDiscoverRef.current?.jobs || [])
   const [loading, setLoading]     = useState(false)
   const [error, setError]         = useState(null)
   const [banner, setBanner]       = useState(null)
-  const [keyword, setKeyword]     = useState('')
-  const [activeKeyword, setActiveKeyword] = useState('')
+  const [keyword, setKeyword]     = useState(() => savedDiscoverRef.current?.keyword || '')
+  const [activeKeyword, setActiveKeyword] = useState(() => savedDiscoverRef.current?.keyword || '')
   const [searchHistory, setSearchHistory] = useState(loadHistory)
   const [showHistory, setShowHistory]     = useState(false)
   const blurTimerRef = useRef(null)
-  const [expandedId, setExpandedId] = useState(null)
+  const [expandedId, setExpandedId] = useState(() => savedDiscoverRef.current?.expandedId || null)
   const [openFilter, setOpenFilter] = useState(null) // which chip dropdown is open
   const [appliedIds, setAppliedIds] = useState(() => new Set(applications.map(a => a.id)))
   const [showAddModal, setShowAddModal] = useState(false)
 
   const profileSectors = user.sectors?.length ? user.sectors : user.sector ? [user.sector] : []
 
-  const [filters, setFilters] = useState(() => ({
+  const [filters, setFilters] = useState(() => savedDiscoverRef.current?.filters || {
     countryCode: resolveCountryCode(user.country),
     where: '',
     salaryMin: '',
     salaryMax: '',
-  }))
+  })
 
-  const [frontendFilters, setFrontendFilters] = useState(DEFAULT_FF)
+  const [frontendFilters, setFrontendFilters] = useState(() => savedDiscoverRef.current?.frontendFilters || DEFAULT_FF)
 
   // ── Derived display list ──────────────────────────────────────────────────
   const displayedJobs = applyFrontendFilters(jobs, frontendFilters, !!activeKeyword.trim())
@@ -735,7 +746,26 @@ export default function Discover() {
     }
   }
 
+  // ── Persist discover state ────────────────────────────────────────────────
   useEffect(() => {
+    clearTimeout(discoverSaveTimerRef.current)
+    discoverSaveTimerRef.current = setTimeout(() => {
+      try {
+        localStorage.setItem(DISCOVER_KEY, JSON.stringify({
+          keyword: activeKeyword,
+          filters,
+          frontendFilters,
+          jobs,
+          expandedId,
+        }))
+      } catch {}
+    }, 500)
+  }, [activeKeyword, filters, frontendFilters, jobs, expandedId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (savedDiscoverRef.current?.jobs?.length) {
+      return () => { if (abortRef.current) abortRef.current.abort() }
+    }
     fetchJobs()
     return () => { if (abortRef.current) abortRef.current.abort() }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps

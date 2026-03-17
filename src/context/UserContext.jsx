@@ -383,7 +383,12 @@ export function UserProvider({ children }) {
     if (error) console.error('[Supabase] deleteDraft error:', error)
   }
 
-  const signOut = () => supabase.auth.signOut()
+  const signOut = () => {
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('apex_'))
+      .forEach(k => localStorage.removeItem(k))
+    return supabase.auth.signOut()
+  }
 
   return (
     <UserContext.Provider value={{

@@ -11,10 +11,12 @@ import posthog from 'posthog-js'
 // ─── Constants ────────────────────────────────────────────────────────────────
 const MODEL = 'claude-sonnet-4-20250514'
 
+const ANALYSIS_SYSTEM_PROMPT = `You are an expert career coach analyzing a student's CV against a job description. Your only task is to identify if there is any specific information missing from the CV that would meaningfully improve the tailoring quality. Think about: career motivations, specific skills not mentioned, relevant experiences that might not be in the CV, preferences about tone or emphasis. If you have 1-3 genuinely useful questions, output them as a numbered list. If you have everything you need, output exactly: NO_QUESTIONS. Be strict — only ask if the answer would actually change the output. Never ask obvious or generic questions.`
+
 const SYSTEM_PROMPT = `You are an expert career coach and CV writer with 15 years of experience helping students land jobs at top companies. Your task is to tailor a student's CV and write a cover letter for a specific job posting.
 
 LANGUAGE DETECTION:
-Detect the primary language of the job description provided. Generate ALL outputs (tailored CV, cover letter, and interview questions) in that same language. For Italian job postings, write in professional Italian. For English job postings, write in professional English. When the language is mixed or uncertain, default to Italian (the primary target market).
+Detect the primary language of the job description provided. Generate ALL outputs (tailored CV, cover letter, and changelog) in that same language. For Italian job postings, write in professional Italian. For English job postings, write in professional English. When the language is mixed or uncertain, default to Italian (the primary target market).
 
 STRICT RULES:
 - NEVER invent experience, skills, or qualifications not present in the original CV
@@ -22,7 +24,6 @@ STRICT RULES:
 - Optimize naturally for ATS by integrating exact keywords from the job description
 - Adapt the narrative tone to the company culture (startup=bold/results-driven, corporate=structured/methodical, creative=innovative/passionate)
 - Rewrite bullet points with strong action verbs and quantifiable results where possible
-- If information is missing or unclear, ask the student targeted clarifying questions BEFORE generating
 
 CV TAILORING HIERARCHY — apply this logic to every experience, project, or activity:
 
@@ -74,9 +75,7 @@ REMOVED: [experience name] — [why: no meaningful skill overlap, removed to fit
 REWRITTEN: [section name] — [what changed and why]
 Maximum 6 changelog items. Always explain WHY in plain language. Write changelog in the same language as the CV. Tone: direct and helpful, like a career advisor explaining their choices.
 Then output exactly this separator: |||COVER_LETTER|||
-Then output the cover letter.
-Then output exactly this separator: |||QUESTIONS|||
-Then output any clarifying questions you have for the student (empty if none).`
+Then output the cover letter.`
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 async function* parseSSE(response) {
@@ -153,6 +152,15 @@ function parseResponse(raw) {
     .slice(0, 6)
 
   return { cv: cvPart.trim(), cover: coverPart.trim(), questions, changes }
+}
+
+function parseAnalysisQuestions(raw) {
+  if (!raw || /NO_QUESTIONS/i.test(raw)) return []
+  return raw
+    .split('\n')
+    .map(l => l.replace(/^[\d.\-*•]+\.?\s*/, '').trim())
+    .filter(l => l.length > 10)
+    .slice(0, 3)
 }
 
 function parseInline(text, baseSize = 22) {
@@ -380,12 +388,36 @@ export default function TailoringLab() {
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [mainTab, setMainTab]           = useState('new')
-  const [activeJob, setActiveJob]       = useState(location.state?.job ?? null)
-  const [phase, setPhase]               = useState('idle')
+  const [activeJob, setActiveJob]       = useState(() => {
+    if (location.state?.job) return location.state.job
+    try { return JSON.parse(localStorage.getItem('apex_lab_state') || '{}').activeJob || null }
+    catch { return null }
+  })
+  const [phase, setPhase]               = useState(() => {
+    if (location.state?.job) return 'idle'
+    try {
+      const s = JSON.parse(localStorage.getItem('apex_lab_state') || '{}')
+      if (s.tailoredCV) return 'done'
+      if (s.questions?.length) return 'questioning'
+      return 'idle'
+    } catch { return 'idle' }
+  })
   const [streamText, setStreamText]     = useState('')
-  const [tailoredCV, setTailoredCV]     = useState('')
-  const [coverLetter, setCoverLetter]   = useState('')
-  const [questions, setQuestions]       = useState([])
+  const [tailoredCV, setTailoredCV]     = useState(() => {
+    if (location.state?.job) return ''
+    try { return JSON.parse(localStorage.getItem('apex_lab_state') || '{}').tailoredCV || '' }
+    catch { return '' }
+  })
+  const [coverLetter, setCoverLetter]   = useState(() => {
+    if (location.state?.job) return ''
+    try { return JSON.parse(localStorage.getItem('apex_lab_state') || '{}').coverLetter || '' }
+    catch { return '' }
+  })
+  const [questions, setQuestions]       = useState(() => {
+    if (location.state?.job) return []
+    try { return JSON.parse(localStorage.getItem('apex_lab_state') || '{}').questions || [] }
+    catch { return [] }
+  })
   const [answers, setAnswers]           = useState({})
   const [activeDocTab, setActiveDocTab] = useState(() => {
     if (location.state?.openTab) return location.state.openTab
@@ -396,6 +428,7 @@ export default function TailoringLab() {
   const [error, setError]               = useState(null)
   const [addedToTracker, setAddedToTracker] = useState(false)
   const [downloading, setDownloading]   = useState(null)
+  const [copied, setCopied]             = useState(false)
   const [sessionId, setSessionId]       = useState(null)
   const [activeDraftId, setActiveDraftId] = useState(null)
   const [descExpanded, setDescExpanded]   = useState(false)
@@ -426,6 +459,24 @@ export default function TailoringLab() {
       localStorage.setItem('apex_lab_state', JSON.stringify({ ...saved, activeDocTab }))
     } catch {}
   }, [activeDocTab])
+
+  // Save activeJob, tailoredCV, coverLetter, questions (debounced)
+  const labSaveTimerRef = useRef(null)
+  useEffect(() => {
+    clearTimeout(labSaveTimerRef.current)
+    labSaveTimerRef.current = setTimeout(() => {
+      try {
+        const saved = JSON.parse(localStorage.getItem('apex_lab_state') || '{}')
+        localStorage.setItem('apex_lab_state', JSON.stringify({
+          ...saved,
+          activeJob,
+          tailoredCV,
+          coverLetter,
+          questions,
+        }))
+      } catch {}
+    }, 500)
+  }, [activeJob, tailoredCV, coverLetter, questions]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Restore scroll position once phase becomes 'done' (content is in DOM)
   useEffect(() => {
@@ -464,31 +515,15 @@ export default function TailoringLab() {
     }, 200)
   }, [])
 
-  // ── Load saved answers + auto-generate on mount ────────────────────────────
+  // ── Auto-start analysis on fresh Discover navigation ──────────────────────
   useEffect(() => {
+    // Only auto-start when job was passed fresh from Discover (location.state?.job).
+    // On localStorage restore (no location.state), skip — UI already shows correct phase.
     if (!activeJob || tailoredCV) return
+    if (!location.state?.job) return
     let cancelled = false
-
-    const init = async () => {
-      let savedAnswers = {}
-      if (session?.user?.id) {
-        const { data } = await supabase
-          .from('tailoring_sessions')
-          .select('id, answers')
-          .eq('user_id', session.user.id)
-          .eq('job_id', String(activeJob.id))
-          .maybeSingle()
-
-        if (data) {
-          setSessionId(data.id)
-          savedAnswers = data.answers || {}
-          setAnswers(savedAnswers)
-        }
-      }
-      if (!cancelled) await generate(savedAnswers)
-    }
-
-    init()
+    const run = async () => { if (!cancelled) await startFlow() }
+    run()
     return () => {
       cancelled = true
       abortRef.current?.abort?.()
@@ -531,7 +566,44 @@ export default function TailoringLab() {
     if (saved) setActiveDraftId(saved.id)
   }
 
-  // ── Generate (streaming) ───────────────────────────────────────────────────
+  // ── Step 1: Analysis (non-streaming) ───────────────────────────────────────
+  const startFlow = async () => {
+    if (!activeJob) return
+    setPhase('analyzing')
+    setError(null)
+    try {
+      const res = await fetch('/api/tailoring', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{
+            role: 'user',
+            content: `CV:\n${user.cvText?.trim() || 'Not provided'}\n\nJob title: ${activeJob.title}\nCompany: ${activeJob.company}\nJob description: ${activeJob.description || 'Not provided'}\n\nDo you need any clarifying information to tailor this CV optimally? If yes, list max 3 specific questions. If no, output NO_QUESTIONS.`,
+          }],
+          systemPrompt: ANALYSIS_SYSTEM_PROMPT,
+          stream: false,
+          maxTokens: 500,
+        }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      const data = await res.json()
+      const rawText = data?.content?.[0]?.text ?? data?.text ?? ''
+      const qs = parseAnalysisQuestions(rawText)
+      if (qs.length === 0) {
+        await generate()
+      } else {
+        setQuestions(qs)
+        setAnswers({})
+        setPhase('questioning')
+      }
+    } catch (err) {
+      if (err.name === 'AbortError') { setPhase('idle'); return }
+      console.error('[TailoringLab] Analysis error:', err)
+      await generate() // fall back to direct generation
+    }
+  }
+
+  // ── Step 3: Generate (streaming) ───────────────────────────────────────────
   const generate = async (currentAnswers = answers) => {
     setPhase('generating')
     setStreamText('')
@@ -567,17 +639,34 @@ export default function TailoringLab() {
       const parsed = parseResponse(fullText)
       setTailoredCV(parsed.cv)
       setCoverLetter(parsed.cover)
-      setQuestions(parsed.questions)
       setChangelog(parsed.changes)
       setChangelogOpen(false)
       setPhase('done')
+
+      // Immediately persist to localStorage so a tab-reload/discard shows 'done', not re-generates
+      try {
+        const saved = JSON.parse(localStorage.getItem('apex_lab_state') || '{}')
+        localStorage.setItem('apex_lab_state', JSON.stringify({
+          ...saved,
+          activeJob,
+          tailoredCV: parsed.cv,
+          coverLetter: parsed.cover,
+          questions: [],
+        }))
+      } catch { /* ignore */ }
       if (parsed.cv) posthog.capture('cv_generated', { job_title: activeJob?.title, company: activeJob?.company })
       if (parsed.cover) posthog.capture('cover_letter_generated', { job_title: activeJob?.title, company: activeJob?.company })
 
       // Auto-save draft
       await persistDraft(parsed.cv, parsed.cover)
     } catch (err) {
-      if (err.name === 'AbortError') return
+      if (err.name === 'AbortError') {
+        // Stream was aborted (tab switch / navigate away). Reset to idle so
+        // the restored state (from localStorage) drives the UI, not 'generating'.
+        setPhase('idle')
+        setStreamText('')
+        return
+      }
       console.error('[TailoringLab] API error:', err)
       setError(err.message || 'An error occurred. Please try again.')
       setPhase('error')
@@ -700,9 +789,16 @@ export default function TailoringLab() {
     setActiveJob(null)
     setTailoredCV('')
     setCoverLetter('')
+    setQuestions([])
+    setAnswers({})
+    setChangelog([])
+    setChangelogOpen(false)
+    setError(null)
     setPhase('idle')
     setActiveDraftId(null)
     setAddedToTracker(false)
+    setDescExpanded(false)
+    setAlexBanner(null)
     navigate('/dashboard/tailoring-lab', { replace: true, state: {} })
   }
 
@@ -802,7 +898,7 @@ export default function TailoringLab() {
             <div className="flex flex-col md:flex-row gap-6 flex-1 min-h-0 md:overflow-hidden">
 
               {/* ─ LEFT COLUMN (35%) ─ */}
-              <div className="w-full md:w-80 flex-shrink-0 flex flex-col gap-4 md:overflow-y-auto">
+              <div className="w-full md:w-80 flex-shrink-0 flex flex-col gap-4 md:overflow-y-auto md:h-[calc(100vh-200px)]">
 
                 {/* Job info card */}
                 <div className="bg-white rounded-xl border border-slate-200 p-5">
@@ -858,37 +954,6 @@ export default function TailoringLab() {
                     </button>
                   </div>
                 </div>
-
-                {/* Alex questions (only when done and questions exist) */}
-                {phase === 'done' && questions.length > 0 && (
-                  <div className="bg-white rounded-xl border border-amber-200 overflow-hidden">
-                    <div className="px-5 py-3.5 border-b border-amber-100 bg-amber-50/50">
-                      <h3 className="font-semibold text-slate-800 text-sm flex items-center gap-2">
-                        <span>💬</span> Alex has questions
-                      </h3>
-                      <p className="text-xs text-slate-500 mt-0.5">Answer to get a better result</p>
-                    </div>
-                    <div className="p-4 space-y-4">
-                      <AlexBubble>
-                        <p className="text-xs font-medium mb-2.5">To tailor your application better:</p>
-                        <div className="space-y-3">
-                          {questions.map((q, i) => (
-                            <div key={i}>
-                              <p className="text-xs font-medium text-apex-text mb-1">{i + 1}. {q}</p>
-                              <textarea
-                                value={answers[q] || ''}
-                                onChange={(e) => setAnswers(prev => ({ ...prev, [q]: e.target.value }))}
-                                placeholder="Your answer…"
-                                rows={2}
-                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-apex-text placeholder-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-apex-blue focus:border-transparent resize-none"
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      </AlexBubble>
-                    </div>
-                  </div>
-                )}
 
                 {/* ── Ask Alex to edit ── */}
                 {phase === 'done' && (tailoredCV || coverLetter) && (
@@ -984,13 +1049,102 @@ export default function TailoringLab() {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
-                    {questions.length > 0 ? 'Regenerate with answers' : 'Regenerate'}
+                    Regenerate
                   </button>
                 )}
               </div>
 
               {/* ─ RIGHT COLUMN (flex-1) ─ */}
               <div className="flex-1 min-w-0 flex flex-col md:overflow-hidden">
+
+                {/* Idle */}
+                {phase === 'idle' && (
+                  <div className="flex-1 bg-white rounded-xl border border-slate-200 flex flex-col items-center justify-center p-8 text-center gap-5">
+                    <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-apex-blue to-apex-cyan flex items-center justify-center shadow-sm">
+                      <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-800 mb-1">Pronto per la personalizzazione</p>
+                      <p className="text-sm text-slate-500 max-w-xs">Alex riscriverà il tuo CV e preparerà una lettera di presentazione su misura per questo ruolo.</p>
+                    </div>
+                    <button
+                      onClick={() => startFlow()}
+                      className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold text-white shadow-sm shadow-blue-500/20 hover:opacity-90 transition-opacity"
+                      style={{ background: 'linear-gradient(135deg,#2563EB,#38BDF8)' }}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      Genera con Alex
+                    </button>
+                  </div>
+                )}
+
+                {/* Analyzing */}
+                {phase === 'analyzing' && (
+                  <div className="flex-1 bg-white rounded-xl border border-slate-200 flex items-center justify-center p-8">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-apex-blue to-apex-cyan flex items-center justify-center flex-shrink-0 shadow-sm">
+                        <span className="text-white font-bold text-xs">A</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-slate-700">Alex sta analizzando…</p>
+                        <p className="text-xs text-slate-400">Lettura del CV e della descrizione del ruolo</p>
+                      </div>
+                      <div className="flex gap-1 ml-1">
+                        {[0, 150, 300].map(d => (
+                          <span key={d} className="w-1.5 h-1.5 bg-apex-blue rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Questioning */}
+                {phase === 'questioning' && (
+                  <div className="flex-1 bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col">
+                    <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-3 flex-shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-apex-blue to-apex-cyan flex items-center justify-center flex-shrink-0 shadow-sm">
+                        <span className="text-white font-bold text-xs">A</span>
+                      </div>
+                      <div>
+                        <p className="font-semibold text-slate-800 text-sm">Prima di iniziare, ho alcune domande</p>
+                        <p className="text-xs text-slate-400">Rispondimi per un risultato migliore — oppure salta direttamente alla generazione</p>
+                      </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                      {questions.map((q, i) => (
+                        <div key={i} className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                          <p className="text-sm font-medium text-slate-800 mb-2">{i + 1}. {q}</p>
+                          <textarea
+                            value={answers[q] || ''}
+                            onChange={e => setAnswers(prev => ({ ...prev, [q]: e.target.value }))}
+                            placeholder="La tua risposta…"
+                            rows={3}
+                            className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-700 placeholder-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-apex-blue focus:border-transparent resize-none"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex-shrink-0 px-6 py-4 border-t border-slate-100 flex flex-col items-center gap-2">
+                      <button
+                        onClick={() => generate(answers)}
+                        className="w-full py-2.5 rounded-xl text-sm font-semibold text-white shadow-sm shadow-blue-500/20 hover:opacity-90 transition-opacity"
+                        style={{ background: 'linear-gradient(135deg,#2563EB,#38BDF8)' }}
+                      >
+                        Genera ora
+                      </button>
+                      <button
+                        onClick={() => generate({})}
+                        className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        Salta e genera
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Generating */}
                 {phase === 'generating' && <LoadingCard streamText={streamText} />}
@@ -1046,10 +1200,14 @@ export default function TailoringLab() {
                           ))}
                         </div>
                         <button
-                          onClick={() => navigator.clipboard?.writeText(activeDocTab === 'cv' ? tailoredCV : coverLetter)}
-                          className="text-xs text-slate-400 hover:text-apex-blue transition-colors"
+                          onClick={() => {
+                            navigator.clipboard?.writeText(activeDocTab === 'cv' ? tailoredCV : coverLetter)
+                            setCopied(true)
+                            setTimeout(() => setCopied(false), 2000)
+                          }}
+                          className={`text-xs transition-colors ${copied ? 'text-green-600' : 'text-slate-400 hover:text-apex-blue'}`}
                         >
-                          Copy
+                          {copied ? '✓ Copied' : 'Copy'}
                         </button>
                       </div>
                     </div>
@@ -1122,34 +1280,38 @@ export default function TailoringLab() {
 
                     {/* Bottom action bar */}
                     <div className="flex-shrink-0 flex items-center gap-3 px-5 py-4 border-t border-slate-100 bg-slate-50/50">
-                      {/* Download buttons */}
-                      <button
-                        onClick={() => handleDownload('cv')}
-                        disabled={downloading === 'cv'}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border border-slate-200 text-slate-600 hover:bg-white hover:border-slate-300 transition-all disabled:opacity-60"
-                      >
-                        {downloading === 'cv'
-                          ? <div className="w-3.5 h-3.5 rounded-full border border-slate-400/30 border-t-slate-500 animate-spin" />
-                          : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                            </svg>
-                        }
-                        CV .docx
-                      </button>
+                      {/* Download buttons — only shown when content exists */}
+                      {tailoredCV && (
+                        <button
+                          onClick={() => handleDownload('cv')}
+                          disabled={downloading === 'cv'}
+                          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border border-slate-200 text-slate-600 hover:bg-white hover:border-slate-300 transition-all disabled:opacity-60"
+                        >
+                          {downloading === 'cv'
+                            ? <div className="w-3.5 h-3.5 rounded-full border border-slate-400/30 border-t-slate-500 animate-spin" />
+                            : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                              </svg>
+                          }
+                          CV .docx
+                        </button>
+                      )}
 
-                      <button
-                        onClick={() => handleDownload('cover')}
-                        disabled={downloading === 'cover'}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border border-slate-200 text-slate-600 hover:bg-white hover:border-slate-300 transition-all disabled:opacity-60"
-                      >
-                        {downloading === 'cover'
-                          ? <div className="w-3.5 h-3.5 rounded-full border border-slate-400/30 border-t-slate-500 animate-spin" />
-                          : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                            </svg>
-                        }
-                        Cover Letter .docx
-                      </button>
+                      {coverLetter && (
+                        <button
+                          onClick={() => handleDownload('cover')}
+                          disabled={downloading === 'cover'}
+                          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border border-slate-200 text-slate-600 hover:bg-white hover:border-slate-300 transition-all disabled:opacity-60"
+                        >
+                          {downloading === 'cover'
+                            ? <div className="w-3.5 h-3.5 rounded-full border border-slate-400/30 border-t-slate-500 animate-spin" />
+                            : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                              </svg>
+                          }
+                          Cover Letter .docx
+                        </button>
+                      )}
 
                       {/* Spacer */}
                       <div className="flex-1" />
@@ -1185,16 +1347,6 @@ export default function TailoringLab() {
                   </div>
                 )}
 
-                {/* Only questions, no CV yet */}
-                {phase === 'done' && !tailoredCV && !coverLetter && questions.length > 0 && (
-                  <div className="flex-1 bg-white rounded-xl border border-slate-200 flex items-center justify-center text-center p-8">
-                    <div>
-                      <p className="text-sm text-slate-500 mb-4">
-                        Answer Alex's questions on the left, then click <strong className="text-slate-700">Regenerate</strong>.
-                      </p>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           )}

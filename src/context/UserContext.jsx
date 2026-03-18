@@ -251,12 +251,13 @@ export function UserProvider({ children }) {
         .insert({
           user_id:      userId,
           job_id:       jobIdStr,
-          job_title:    job.title    || '',
-          company:      job.company  || '',
-          location:     job.location || '',
+          job_title:    job.title       || '',
+          company:      job.company     || '',
+          location:     job.location    || '',
+          description:  job.description || '',
           tailored_cv:  tailoredCv,
           cover_letter: coverLetter,
-          match_score:  matchScore   || 0,
+          match_score:  matchScore      || 0,
           status:       'Applied',
           notes:        '',
         })

@@ -47,48 +47,63 @@ async function* parseSSE(response) {
   }
 }
 
-function buildSystemPrompt(user, applications, drafts) {
-  const sectors    = user.sectors?.join(', ') || user.sector || 'Not specified'
-  const cvSummary  = user.cvText
-    ? user.cvText.slice(0, 3000) + (user.cvText.length > 3000 ? '…' : '')
-    : 'No CV provided'
-  const appsData   = applications.length
-    ? applications.slice(0, 15).map(a => {
-        const base = `- ${a.title} at ${a.company} (${a.status})`
-        return a.manual && a.description
-          ? `${base}\n  Job description: ${a.description.slice(0, 300)}${a.description.length > 300 ? '…' : ''}`
-          : base
-      }).join('\n')
-    : 'No applications yet'
+function buildSystemPrompt(user, drafts, applications) {
+  const sectors = user.sectors?.length ? user.sectors.join(', ') : user.sector || 'Not specified'
+  const langs = user.languages?.filter(l => l.lang).map(l => `${l.lang} (${l.level})`).join(', ') || 'Not specified'
   const salaryLine = (user.salaryMin || user.salaryMax)
-    ? `${user.salaryCurrency || '€'}${user.salaryMin || ''}${user.salaryMax ? ` – ${user.salaryCurrency || '€'}${user.salaryMax}` : ''}`
+    ? `${user.salaryCurrency || '€'}${user.salaryMin || '?'} – ${user.salaryCurrency || '€'}${user.salaryMax || '?'}`
     : 'Not specified'
 
-  return `You are Alex, an expert AI career advisor built into APEX, a job application platform for university students. You are warm, direct, and highly competent — like having a senior career coach as a personal friend.
+  const appsData = applications?.length
+    ? applications.map(a => {
+        const base = `- ${a.title} at ${a.company}${a.location ? ` (${a.location})` : ''} — Status: ${a.status}${a.appliedDate ? `, applied ${a.appliedDate}` : ''}${a.matchScore ? `, match score: ${a.matchScore}` : ''}${a.notes ? `\n  Notes: ${a.notes}` : ''}`
+        const hasDescription = a.description && a.description.trim().length > 20
+        return hasDescription
+          ? `${base}\n  Job description excerpt: ${a.description.slice(0, 600)}…`
+          : base
+      }).join('\n')
+    : 'No applications yet.'
 
-User profile:
+  const cvSummary = user.cvText?.trim()
+    ? user.cvText.trim().slice(0, 3000)
+    : 'No CV uploaded yet.'
+
+  return `You are Alex, an expert AI career advisor built into APEX, a job application platform for university students and recent graduates. You are warm, direct, and highly competent — like having a senior career coach as a trusted personal friend who knows your full situation.
+
+USER PROFILE:
 - Name: ${user.name || 'the user'}
-- Target sector: ${sectors}
+- Target sectors: ${sectors}
 - Location: ${[user.city, user.country].filter(Boolean).join(', ') || 'Not specified'}
 - Contract preference: ${user.contractType || 'Not specified'}
 - Work mode: ${user.workMode || 'Not specified'}
 - Salary expectation: ${salaryLine}
-- Languages: ${user.languages?.filter(l => l.lang).map(l => `${l.lang} (${l.level})`).join(', ') || 'Not specified'}
+- Languages: ${langs}
 
-CV:
+CV (up to 3000 chars):
 ${cvSummary}
 
-Current applications:
+APPLICATIONS (${applications?.length || 0} total, ${drafts?.length || 0} drafts in progress):
 ${appsData}
 
-Drafts in progress: ${drafts?.length || 0}
+YOUR ROLE AND CAPABILITIES:
+You are not a generic chatbot. You are a career advisor who knows this specific person's CV, their active applications, where each one stands, and what they need to do next. Use this context actively — do not give generic advice when specific advice is possible.
 
-RULES:
-- Be concise and direct — 2-4 sentences unless more detail is clearly needed
-- Always reference the user's actual data when giving advice
-- Use markdown: bullet points with "- ", **bold** for emphasis, no headers unless needed
-- Never make up information about companies
-- When asked about interview prep, give role-specific questions based on their applications`
+You can help with:
+- Job search strategy: which roles fit this profile, which to prioritize, how to position themselves
+- Application review: analyze their CV or cover letter for a specific role and give concrete improvement suggestions
+- Interview preparation: generate role-specific questions based on actual job descriptions, coach on how to answer them using their real experience
+- Follow-up strategy: when and how to follow up on specific applications based on their status and timeline
+- Career development: honest assessment of skill gaps, what to learn, how to grow toward their goals
+- Offer evaluation: help think through decisions when they have competing options
+
+RESPONSE RULES:
+- Be concise and direct. Default to 2–4 sentences for simple questions. Use more depth only when the question genuinely requires it (e.g. full interview prep, detailed CV feedback).
+- Always reference the user's actual data when giving advice. Never give advice that ignores what you know about them.
+- When you notice something important in their data that they haven't asked about — a stale application, a mismatch between their profile and their target roles, a strong opportunity they might be underestimating — mention it briefly and offer to go deeper.
+- Use markdown: bullet points with "- ", **bold** for emphasis. Use headers (##) only for responses with 3 or more distinct sections.
+- Never make up information about companies or roles.
+- When asked about interview prep for a specific role, generate questions grounded in the actual job description if available. Always connect suggested answers back to the user's real CV.
+- Be honest even when it's uncomfortable. If their CV is weak for a role, say so clearly and explain what to do about it. A good advisor does not just validate.`
 }
 
 async function streamAlex({ messages, systemPrompt, onChunk, onDone, onError, abortRef }) {
@@ -410,7 +425,7 @@ export default function Alex() {
   const { user, applications, drafts, session } = useUser()
   const userId     = session?.user?.id
   const firstName  = user.name?.split(' ')[0] || 'there'
-  const systemPrompt = buildSystemPrompt(user, applications, drafts)
+  const systemPrompt = buildSystemPrompt(user, drafts, applications)
 
   // Pick a random phrase once on mount
   const phrase = useMemo(

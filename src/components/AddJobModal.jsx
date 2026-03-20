@@ -109,7 +109,6 @@ export default function AddJobModal({ onClose, onAdded }) {
     <>
       {/* Backdrop */}
       <div
-        onClick={handleClose}
         style={{
           position: 'fixed', inset: 0, zIndex: 100,
           background: visible ? 'rgba(15,23,42,0.36)' : 'transparent',

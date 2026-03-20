@@ -195,7 +195,6 @@ export function UserProvider({ children }) {
             const isNewUser = new Date() - new Date(session.user.created_at) < 60000
             if (isNewUser) posthog.capture('user_signed_up')
 
-            setProfileLoaded(false)
             Promise.all([
               loadProfile(session.user.id),
               loadApplications(session.user.id),

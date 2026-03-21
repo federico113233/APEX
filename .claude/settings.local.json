@@ -18,7 +18,9 @@
       "Bash(npx kill-port:*)",
       "Bash(curl -s -X POST http://localhost:5200/api/tailoring -H \"Content-Type: application/json\" -d '{}' | head -c 120\npkill -f \"vite --port 51\" 2>/dev/null; true)",
       "Bash(curl -sv -X POST http://localhost:5200/api/tailoring -H \"Content-Type: application/json\" -d '{}' 2>&1 | grep -E \"< HTTP|error|messages\")",
-      "Bash(pkill -f \"vite --port 52\" 2>/dev/null; true)"
+      "Bash(pkill -f \"vite --port 52\" 2>/dev/null; true)",
+      "Bash(grep:*)",
+      "Bash(cd:*)"
     ]
   }
 }

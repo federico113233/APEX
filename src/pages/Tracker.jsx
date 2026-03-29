@@ -1076,6 +1076,8 @@ function Tracker() {
   const [selected, setSelected]       = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showJobAddedToast, setShowJobAddedToast] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [activeFilter, setActiveFilter] = useState('All')
 
   // Restore selected application from localStorage after applications load
   useEffect(() => {
@@ -1096,6 +1098,18 @@ function Tracker() {
     acc[s] = applications.filter((a) => a.status === s).length
     return acc
   }, {})
+
+  const filteredApplications = applications.filter((a) => {
+    const matchesStatus = activeFilter === 'All' || a.status === activeFilter
+    const q = searchQuery.toLowerCase()
+    const matchesSearch = !q ||
+      (a.title || '').toLowerCase().includes(q) ||
+      (a.company || '').toLowerCase().includes(q) ||
+      (a.location || '').toLowerCase().includes(q)
+    return matchesStatus && matchesSearch
+  })
+
+  const toggleFilter = (status) => setActiveFilter((prev) => prev === status ? 'All' : status)
 
   const handleDelete = async (appId) => {
     await deleteApplication(appId)
@@ -1121,7 +1135,7 @@ function Tracker() {
 
   return (
     <>
-      <div className="p-4 md:p-8 page-fade-in">
+      <div className="p-4 md:p-8 page-fade-in h-full overflow-y-auto">
       <div className="mb-8 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Tracker</h1>
@@ -1149,13 +1163,73 @@ function Tracker() {
 
       {/* Pipeline summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        {STATUSES.map((status) => (
-          <div key={status} className="bg-white rounded-xl border border-slate-100 p-5 hover:shadow-sm transition-all duration-150">
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_COLORS[status]?.dot, marginBottom: 12 }} />
-            <p className="text-3xl font-bold text-slate-900">{counts[status]}</p>
-            <p className="text-sm text-slate-500 mt-0.5 font-medium">{status}</p>
-          </div>
-        ))}
+        {STATUSES.map((status) => {
+          const isActive = activeFilter === status
+          return (
+            <div
+              key={status}
+              onClick={() => toggleFilter(status)}
+              className="bg-white rounded-xl border p-5 hover:shadow-sm transition-all duration-150 cursor-pointer"
+              style={{ borderColor: isActive ? STATUS_COLORS[status].dot : '#f1f5f9', boxShadow: isActive ? `0 0 0 2px ${STATUS_COLORS[status].dot}` : undefined }}
+            >
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_COLORS[status]?.dot, marginBottom: 12 }} />
+              <p className="text-3xl font-bold text-slate-900">{counts[status]}</p>
+              <p className="text-sm mt-0.5 font-medium" style={{ color: isActive ? STATUS_COLORS[status].text : '#64748b' }}>{status}</p>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Search + filter pills */}
+      <div className="mb-5 space-y-3">
+        {/* Search bar */}
+        <div className="relative">
+          <svg
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+            width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+          </svg>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search your applications..."
+            className="w-full rounded-xl border border-slate-200 pl-10 pr-4 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
+          />
+        </div>
+
+        {/* Filter pills */}
+        <div className="flex flex-wrap gap-2">
+          {/* All pill */}
+          <button
+            onClick={() => setActiveFilter('All')}
+            className="px-3.5 py-1.5 rounded-full text-sm font-medium transition-all"
+            style={activeFilter === 'All'
+              ? { background: '#0F172A', color: '#fff', fontWeight: 600 }
+              : { background: '#fff', border: '1px solid #e2e8f0', color: '#64748b' }
+            }
+          >
+            All
+          </button>
+          {STATUSES.map((status) => {
+            const isActive = activeFilter === status
+            return (
+              <button
+                key={status}
+                onClick={() => toggleFilter(status)}
+                className="px-3.5 py-1.5 rounded-full text-sm transition-all"
+                style={isActive
+                  ? { background: STATUS_COLORS[status].dot, color: '#fff', fontWeight: 600 }
+                  : { background: '#fff', border: '1px solid #e2e8f0', color: '#64748b' }
+                }
+              >
+                {status}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {applications.length === 0 ? (
@@ -1173,6 +1247,14 @@ function Tracker() {
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-slate-100 overflow-hidden shadow-sm">
+          {filteredApplications.length === 0 ? (
+            <div className="text-center py-16">
+              <svg className="w-9 h-9 mx-auto mb-3 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+              </svg>
+              <p className="text-slate-400 text-sm">No applications match your filters.</p>
+            </div>
+          ) : (
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/50">
@@ -1185,7 +1267,7 @@ function Tracker() {
               </tr>
             </thead>
             <tbody>
-              {applications.map((app) => (
+              {filteredApplications.map((app) => (
                 <tr
                   key={app.id}
                   onClick={() => setSelected(app)}
@@ -1213,6 +1295,7 @@ function Tracker() {
               ))}
             </tbody>
           </table>
+          )}
         </div>
       )}
 

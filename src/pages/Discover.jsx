@@ -919,9 +919,14 @@ export default function Discover() {
           <button
             onClick={() => handleSearch()}
             disabled={loading}
-            className="px-5 py-2 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95 transition-opacity disabled:opacity-60 flex-shrink-0"
+            className="flex-shrink-0 flex items-center justify-center text-white bg-gradient-to-r from-apex-blue to-apex-cyan hover:opacity-95 transition-opacity disabled:opacity-60
+                       w-11 h-11 rounded-xl
+                       md:w-auto md:h-auto md:px-5 md:py-2 md:rounded-lg md:text-sm md:font-medium"
           >
-            {loading ? 'Searching…' : 'Search'}
+            <svg className="w-5 h-5 md:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <span className="hidden md:inline">{loading ? 'Searching…' : 'Search'}</span>
           </button>
         </div>
 
@@ -990,7 +995,10 @@ export default function Discover() {
       </div>
 
       {/* ── Filter chips row ── */}
-      <div className="flex gap-2 items-center flex-wrap mb-5">
+      <div
+        className="discover-filters flex gap-2 items-center mb-5 overflow-x-auto md:overflow-x-visible md:flex-wrap"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+      >
 
         <FilterChip
           label={countryLabel}

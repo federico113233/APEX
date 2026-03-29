@@ -629,32 +629,90 @@ export default function Alex() {
         .alex-msgs::-webkit-scrollbar { width: 0; }
       `}</style>
 
-      {/* ── Mobile drawer backdrop + panel ── */}
-      {isMobile && drawerOpen && (
+      {/* ── Mobile bottom sheet backdrop + panel ── */}
+      {isMobile && (
         <>
+          {/* Backdrop */}
           <div
             onClick={() => setDrawerOpen(false)}
             style={{
-              position: 'fixed', inset: 0, zIndex: 99,
-              background: 'rgba(15,23,42,0.4)',
+              position: 'fixed', inset: 0, zIndex: 40,
+              background: 'rgba(0,0,0,0.4)',
+              opacity: drawerOpen ? 1 : 0,
+              pointerEvents: drawerOpen ? 'auto' : 'none',
+              transition: 'opacity 300ms',
             }}
           />
+          {/* Bottom sheet */}
           <div style={{
-            position: 'fixed',
-            top: 56, left: 0, bottom: 64,
-            width: 280,
-            zIndex: 100,
-            display: 'flex', flexDirection: 'column',
+            position: 'fixed', bottom: 0, left: 0, right: 0,
+            maxHeight: '70vh',
             background: '#fff',
-            borderRight: '1px solid #E2E8F0',
+            borderRadius: '16px 16px 0 0',
+            boxShadow: '0 -4px 40px rgba(15,23,42,0.15)',
+            zIndex: 50,
             overflowY: 'auto',
+            transform: drawerOpen ? 'translateY(0)' : 'translateY(100%)',
+            transition: 'transform 300ms ease',
+            paddingBottom: 'env(safe-area-inset-bottom)',
           }}>
-            <AlexSidebar
-              conversations={conversations}
-              activeId={activeConvId}
-              onNew={() => { handleNew(); setDrawerOpen(false) }}
-              onSelect={(conv) => { handleSelectConversation(conv); setDrawerOpen(false) }}
-            />
+            {/* Drag handle */}
+            <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 12, marginBottom: 16 }}>
+              <div style={{ width: 40, height: 4, background: '#CBD5E1', borderRadius: 999 }} />
+            </div>
+            {/* New chat button */}
+            <div style={{ padding: '0 16px 16px' }}>
+              <button
+                onClick={() => { handleNew(); setDrawerOpen(false) }}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  padding: '12px 16px',
+                  background: 'linear-gradient(135deg,#2563EB,#38BDF8)',
+                  border: 'none', borderRadius: 12, color: '#fff',
+                  fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                </svg>
+                New chat
+              </button>
+            </div>
+            {/* Conversation list */}
+            {conversations.length === 0 ? (
+              <p style={{ margin: '0 20px 16px', fontSize: 13, color: '#94A3B8', fontStyle: 'italic' }}>
+                No conversations yet
+              </p>
+            ) : (
+              conversations.map(conv => {
+                const isActive = conv.id === activeConvId
+                const date = new Date(conv.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                return (
+                  <button
+                    key={conv.id}
+                    onClick={() => { handleSelectConversation(conv); setDrawerOpen(false) }}
+                    style={{
+                      width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+                      padding: '16px 20px',
+                      borderTop: 'none', borderLeft: 'none', borderRight: 'none',
+                      borderBottom: '1px solid #F1F5F9',
+                      background: isActive ? '#EFF6FF' : 'transparent',
+                      cursor: 'pointer', textAlign: 'left',
+                    }}
+                  >
+                    <span style={{
+                      fontSize: 14, fontWeight: isActive ? 600 : 500,
+                      color: isActive ? '#1D4ED8' : '#1E293B',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      width: '100%', display: 'block',
+                    }}>
+                      {conv.title}
+                    </span>
+                    <span style={{ fontSize: 12, color: '#94A3B8', marginTop: 2 }}>{date}</span>
+                  </button>
+                )
+              })
+            )}
           </div>
         </>
       )}
@@ -690,7 +748,7 @@ export default function Alex() {
               onClick={() => setDrawerOpen(true)}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '8px 12px', borderRadius: 8,
+                padding: '8px 12px', borderRadius: 8, minHeight: 44,
                 border: '1.5px solid #E2E8F0', background: '#fff',
                 color: '#0F172A', fontSize: 13, fontWeight: 600,
                 cursor: 'pointer', fontFamily: 'inherit',
@@ -705,7 +763,7 @@ export default function Alex() {
               onClick={handleNew}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '8px 12px', borderRadius: 8,
+                padding: '8px 12px', borderRadius: 8, minHeight: 44,
                 border: 'none', background: '#2563EB',
                 color: '#fff', fontSize: 13, fontWeight: 600,
                 cursor: 'pointer', fontFamily: 'inherit',

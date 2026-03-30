@@ -25,7 +25,7 @@ function vercelDevPlugin() {
   return {
     name: 'vercel-dev',
     configureServer(server) {
-      for (const name of ['tailoring', 'alex', 'alexchat']) {
+      for (const name of ['tailoring', 'alex', 'alexchat', 'import-job']) {
         server.middlewares.use(`/api/${name}`, async (req, res, next) => {
           try {
             // Collect request body

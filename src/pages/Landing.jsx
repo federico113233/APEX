@@ -97,9 +97,9 @@ function Landing() {
           <div className="grid md:grid-cols-3 gap-8">
             {[
               {
-                icon: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z',
-                title: 'Discover',
-                desc: 'Browse real job listings with AI-powered match scores tailored to your profile, sector, and goals.',
+                icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4',
+                title: 'My Jobs',
+                desc: 'Import jobs from LinkedIn, Indeed, or any site. Your personal inbox, organised and ready to tailor.',
               },
               {
                 icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z',

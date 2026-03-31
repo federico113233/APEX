@@ -185,37 +185,163 @@ function MarkdownText({ text }) {
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
-function ConvItem({ conv, isActive, onSelect }) {
+function ConvItem({ conv, isActive, onSelect, onRename, onDelete, openMenuId, setOpenMenuId }) {
   const [hov, setHov] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const [renameVal, setRenameVal] = useState(conv.title)
+  const [fading, setFading] = useState(false)
+  const renameInputRef = useRef(null)
+  const menuOpen = openMenuId === conv.id
   const date = new Date(conv.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+
+  const startRename = (e) => {
+    e.stopPropagation()
+    setOpenMenuId(null)
+    setRenameVal(conv.title)
+    setRenaming(true)
+    setTimeout(() => renameInputRef.current?.focus(), 50)
+  }
+
+  const commitRename = () => {
+    const trimmed = renameVal.trim()
+    if (trimmed && trimmed !== conv.title) onRename(conv.id, trimmed)
+    setRenaming(false)
+  }
+
+  const handleDelete = (e) => {
+    e.stopPropagation()
+    setOpenMenuId(null)
+    setFading(true)
+    setTimeout(() => onDelete(conv.id), 300)
+  }
+
   return (
-    <button
-      onClick={() => onSelect(conv)}
+    <div
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
-      style={{
-        width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
-        padding: '9px 12px', borderRadius: 8, marginBottom: 2,
-        background: (isActive || hov) ? '#EFF6FF' : 'transparent',
-        borderTop: 'none', borderRight: 'none', borderBottom: 'none',
-        borderLeft: (isActive || hov) ? '3px solid #2563EB' : '3px solid transparent',
-        paddingLeft: (isActive || hov) ? 9 : 12,
-        cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s',
-      }}
+      style={{ position: 'relative', opacity: fading ? 0 : 1, transition: 'opacity 0.3s ease', marginBottom: 2 }}
     >
-      <span style={{
-        fontSize: 13.5, fontWeight: isActive ? 700 : 400,
-        color: isActive ? '#1D4ED8' : hov ? '#1E40AF' : '#475569',
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', display: 'block',
-      }}>
-        {conv.title}
-      </span>
-      <span style={{ fontSize: 12, color: '#94A3B8', marginTop: 2 }}>{date}</span>
-    </button>
+      {renaming ? (
+        <div style={{
+          padding: '9px 9px', borderRadius: 8,
+          background: '#EFF6FF', borderLeft: '3px solid #2563EB',
+        }}>
+          <input
+            ref={renameInputRef}
+            value={renameVal}
+            onChange={e => setRenameVal(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { e.preventDefault(); commitRename() }
+              if (e.key === 'Escape') setRenaming(false)
+            }}
+            onBlur={commitRename}
+            style={{
+              width: '100%', border: 'none', outline: 'none',
+              fontSize: 13.5, fontWeight: 600, color: '#1D4ED8',
+              background: 'transparent', fontFamily: 'inherit',
+            }}
+          />
+          <span style={{ fontSize: 12, color: '#94A3B8', marginTop: 2, display: 'block' }}>{date}</span>
+        </div>
+      ) : (
+        <button
+          onClick={() => onSelect(conv)}
+          style={{
+            width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+            padding: '9px 12px', borderRadius: 8,
+            background: (isActive || hov) ? '#EFF6FF' : 'transparent',
+            borderTop: 'none', borderRight: 'none', borderBottom: 'none',
+            borderLeft: (isActive || hov) ? '3px solid #2563EB' : '3px solid transparent',
+            paddingLeft: (isActive || hov) ? 9 : 12,
+            cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s',
+          }}
+        >
+          <span style={{
+            fontSize: 13.5, fontWeight: isActive ? 700 : 400,
+            color: isActive ? '#1D4ED8' : hov ? '#1E40AF' : '#475569',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            width: (hov || menuOpen) ? 'calc(100% - 24px)' : '100%', display: 'block',
+          }}>
+            {conv.title}
+          </span>
+          <span style={{ fontSize: 12, color: '#94A3B8', marginTop: 2 }}>{date}</span>
+        </button>
+      )}
+
+      {/* ··· button */}
+      {!renaming && (hov || menuOpen) && (
+        <button
+          onClick={e => { e.stopPropagation(); setOpenMenuId(menuOpen ? null : conv.id) }}
+          style={{
+            position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+            width: 24, height: 24, borderRadius: 6,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            border: 'none', background: menuOpen ? '#DBEAFE' : 'transparent',
+            cursor: 'pointer', color: '#64748B', transition: 'background 0.15s',
+            zIndex: 1,
+          }}
+          onMouseEnter={e => { if (!menuOpen) e.currentTarget.style.background = '#E2E8F0' }}
+          onMouseLeave={e => { if (!menuOpen) e.currentTarget.style.background = 'transparent' }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.5px', lineHeight: 1 }}>···</span>
+        </button>
+      )}
+
+      {/* Dropdown */}
+      {menuOpen && (
+        <div
+          onMouseDown={e => e.stopPropagation()}
+          style={{
+          position: 'absolute', right: 4, top: 'calc(100% + 2px)', zIndex: 100,
+          background: '#fff', borderRadius: 8, border: '1px solid #E2E8F0',
+          boxShadow: '0 4px 16px rgba(15,23,42,0.1)', minWidth: 120, overflow: 'hidden',
+        }}>
+          <button
+            onClick={startRename}
+            style={{
+              width: '100%', padding: '9px 14px', textAlign: 'left', border: 'none',
+              background: 'transparent', cursor: 'pointer', fontSize: 13, color: '#0F172A',
+              fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#F8FAFC' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+          >
+            <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            Rename
+          </button>
+          <button
+            onClick={handleDelete}
+            style={{
+              width: '100%', padding: '9px 14px', textAlign: 'left', border: 'none',
+              background: 'transparent', cursor: 'pointer', fontSize: 13, color: '#EF4444',
+              fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#FEF2F2' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+          >
+            <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Delete
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
-function AlexSidebar({ conversations, activeId, onNew, onSelect }) {
+function AlexSidebar({ conversations, activeId, onNew, onSelect, onRename, onDelete }) {
+  const [openMenuId, setOpenMenuId] = useState(null)
+
+  useEffect(() => {
+    if (!openMenuId) return
+    const close = () => setOpenMenuId(null)
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [openMenuId])
+
   return (
     <div style={{
       width: 260, minWidth: 260, height: '100%',
@@ -253,7 +379,16 @@ function AlexSidebar({ conversations, activeId, onNew, onSelect }) {
           </p>
         ) : (
           conversations.map(conv => (
-            <ConvItem key={conv.id} conv={conv} isActive={conv.id === activeId} onSelect={onSelect} />
+            <ConvItem
+              key={conv.id}
+              conv={conv}
+              isActive={conv.id === activeId}
+              onSelect={onSelect}
+              onRename={onRename}
+              onDelete={onDelete}
+              openMenuId={openMenuId}
+              setOpenMenuId={setOpenMenuId}
+            />
           ))
         )}
       </div>
@@ -545,6 +680,27 @@ export default function Alex() {
     if (conv) handleSelectConversation(conv)
   }, [conversations]) // eslint-disable-line
 
+  const handleRenameConv = async (id, newTitle) => {
+    console.log('[Alex] handleRenameConv', id, newTitle)
+    setConversations(prev => prev.map(c => c.id === id ? { ...c, title: newTitle } : c))
+    await supabase.from('alex_conversations').update({ title: newTitle }).eq('id', id)
+  }
+
+  const handleDeleteConv = async (id) => {
+    console.log('[Alex] handleDeleteConv', id)
+    setConversations(prev => prev.filter(c => c.id !== id))
+    if (convIdRef.current === id) {
+      setMessages([])
+      setDisplayMsgs([])
+      setInput('')
+      setStreamText('')
+      setHasStarted(false)
+      convIdRef.current = null
+      setActiveConvId(null)
+    }
+    await supabase.from('alex_conversations').delete().eq('id', id)
+  }
+
   const handleNew = () => {
     setMessages([])
     setDisplayMsgs([])
@@ -732,6 +888,8 @@ export default function Alex() {
             activeId={activeConvId}
             onNew={handleNew}
             onSelect={handleSelectConversation}
+            onRename={handleRenameConv}
+            onDelete={handleDeleteConv}
           />
         )}
 

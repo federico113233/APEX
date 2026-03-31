@@ -166,7 +166,7 @@ function MobileBottomNav() {
 // ── Layout ────────────────────────────────────────────────────────────────────
 function DashboardLayout() {
   return (
-    <div className="flex min-h-screen bg-apex-bg">
+    <div className="flex h-screen overflow-hidden bg-apex-bg">
       {/* Sidebar — desktop only */}
       <div className="hidden md:block flex-shrink-0">
         <Sidebar />

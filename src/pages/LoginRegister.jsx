@@ -47,7 +47,7 @@ export default function LoginRegister() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-dvh bg-slate-50 flex flex-col">
       <header className="px-6 py-5">
         <Link to="/">
           <img src="/apex_full_logo.png" alt="APEX" className="h-8 w-auto object-contain" />

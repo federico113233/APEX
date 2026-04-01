@@ -692,7 +692,7 @@ function DetailPanel({ app, onClose, onStatusChange, onNotesChange, onDelete }) 
     <>
       {/* Overlay */}
       <div
-        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh', zIndex: 40, transition: 'background 0.28s', background: visible ? 'rgba(15,23,42,0.28)' : 'transparent' }}
+        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100dvh', zIndex: 40, transition: 'background 0.28s', background: visible ? 'rgba(15,23,42,0.28)' : 'transparent' }}
         onClick={handleClose}
       />
 
@@ -702,7 +702,7 @@ function DetailPanel({ app, onClose, onStatusChange, onNotesChange, onDelete }) 
           position: 'fixed',
           top: 0,
           right: 0,
-          height: '100vh',
+          height: '100dvh',
           width: isMobile ? '100vw' : 500,
           zIndex: 50,
           display: 'flex',
@@ -1201,11 +1201,11 @@ function Tracker() {
         </div>
 
         {/* Filter pills */}
-        <div className="flex flex-wrap gap-2">
+        <div className="pills-scroll">
           {/* All pill */}
           <button
             onClick={() => setActiveFilter('All')}
-            className="px-3.5 py-1.5 rounded-full text-sm font-medium transition-all"
+            className="px-3.5 py-1.5 rounded-full text-sm font-medium transition-all flex-shrink-0"
             style={activeFilter === 'All'
               ? { background: '#0F172A', color: '#fff', fontWeight: 600 }
               : { background: '#fff', border: '1px solid #e2e8f0', color: '#64748b' }
@@ -1219,7 +1219,7 @@ function Tracker() {
               <button
                 key={status}
                 onClick={() => toggleFilter(status)}
-                className="px-3.5 py-1.5 rounded-full text-sm transition-all"
+                className="px-3.5 py-1.5 rounded-full text-sm transition-all flex-shrink-0"
                 style={isActive
                   ? { background: STATUS_COLORS[status].dot, color: '#fff', fontWeight: 600 }
                   : { background: '#fff', border: '1px solid #e2e8f0', color: '#64748b' }
@@ -1255,7 +1255,35 @@ function Tracker() {
               <p className="text-slate-400 text-sm">No applications match your filters.</p>
             </div>
           ) : (
-          <table className="w-full">
+          <>
+            {/* ── Mobile card list ── */}
+            <div className="md:hidden divide-y divide-slate-50">
+              {filteredApplications.map((app) => (
+                <div
+                  key={app.id}
+                  onClick={() => setSelected(app)}
+                  className={`px-4 py-4 cursor-pointer transition-colors ${
+                    selected?.id === app.id ? 'bg-blue-50/40' : 'hover:bg-slate-50/60'
+                  }`}
+                  style={{ minHeight: 64 }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-slate-800 text-sm leading-snug">{app.title}</p>
+                      <p className="text-xs text-slate-500 mt-0.5 truncate">{app.company}{app.location ? ` · ${app.location}` : ''}</p>
+                      {app.appliedDate && <p className="text-xs text-slate-400 mt-1">{app.appliedDate}</p>}
+                    </div>
+                    <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                      <StatusBadge status={app.status} />
+                      {app.manual ? <ManualBadge /> : app.matchScore > 0 && <MatchScoreBadge score={app.matchScore} />}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* ── Desktop table ── */}
+            <table className="mobile-table-hide w-full">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/50">
                 <th className="text-left py-3.5 px-6 text-xs font-semibold text-slate-400 uppercase tracking-widest">Position</th>
@@ -1295,6 +1323,7 @@ function Tracker() {
               ))}
             </tbody>
           </table>
+          </>
           )}
         </div>
       )}

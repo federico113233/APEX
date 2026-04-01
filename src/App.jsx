@@ -42,7 +42,7 @@ function SplashScreen() {
 // ── Spinner while Supabase resolves the session ───────────────────────────────
 function AuthLoading() {
   return (
-    <div className="min-h-screen bg-apex-bg flex items-center justify-center">
+    <div className="min-h-dvh bg-apex-bg flex items-center justify-center">
       <div className="flex flex-col items-center gap-3">
         <div className="w-7 h-7 rounded-full border-2 border-apex-blue/20 border-t-apex-blue animate-spin" />
         <p className="text-sm text-apex-muted font-medium">Loading…</p>

@@ -1,12 +1,8 @@
-import { Link, Navigate } from 'react-router-dom'
-import { useUser } from '../context/UserContext'
+import { Link } from 'react-router-dom'
 
 function Landing() {
-  const { session, sessionLoading } = useUser()
-  if (!sessionLoading && session) return <Navigate to="/dashboard" replace />
-
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-dvh bg-white">
       {/* ── Nav ── */}
       <header className="fixed top-0 left-0 right-0 z-50 border-b border-slate-100 bg-white/90 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -30,7 +26,7 @@ function Landing() {
       </header>
 
       {/* ── Hero ── */}
-      <section className="relative min-h-screen flex items-center justify-center pt-20 pb-24 px-6 overflow-hidden">
+      <section className="relative min-h-dvh flex items-center justify-center pt-20 pb-24 px-6 overflow-hidden">
         {/* Background symbol watermark */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
           <img

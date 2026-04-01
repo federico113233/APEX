@@ -41,7 +41,7 @@ function Sidebar() {
         minWidth: W,
         transition: 'width 0.25s ease, min-width 0.25s ease',
         overflow: 'hidden',
-        minHeight: '100vh',
+        minHeight: '100dvh',
         flexShrink: 0,
         display: 'flex',
         flexDirection: 'column',
@@ -65,12 +65,16 @@ function Sidebar() {
       >
         {collapsed ? (
           <>
-            <img src="/apex_x_blue.png" alt="APEX" style={{ width: 26, height: 26, objectFit: 'contain' }} />
+            <a href="/" onClick={(e) => { e.preventDefault(); window.location.href = '/'; }} style={{ cursor: 'pointer', lineHeight: 0 }}>
+              <img src="/apex_x_blue.png" alt="APEX" style={{ width: 26, height: 26, objectFit: 'contain' }} />
+            </a>
             <ToggleButton collapsed={collapsed} onClick={toggle} />
           </>
         ) : (
           <>
-            <img src="/apex_full_logo.png" alt="APEX" style={{ height: 30, width: 'auto', objectFit: 'contain' }} />
+            <a href="/" onClick={(e) => { e.preventDefault(); window.location.href = '/'; }} style={{ cursor: 'pointer', lineHeight: 0 }}>
+              <img src="/apex_full_logo.png" alt="APEX" style={{ height: 30, width: 'auto', objectFit: 'contain' }} />
+            </a>
             <ToggleButton collapsed={collapsed} onClick={toggle} />
           </>
         )}

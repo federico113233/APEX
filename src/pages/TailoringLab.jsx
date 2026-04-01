@@ -806,7 +806,7 @@ export default function TailoringLab() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="p-4 md:p-8 page-fade-in flex flex-col md:h-screen md:overflow-hidden">
+    <div className="p-4 md:p-8 page-fade-in flex flex-col md:h-dvh md:overflow-hidden">
       {/* Header */}
       <div className="mb-5 flex-shrink-0">
         <h1 className="text-2xl font-bold text-slate-900">Tailoring Lab</h1>
@@ -900,7 +900,7 @@ export default function TailoringLab() {
             <div className="flex flex-col md:flex-row gap-6 flex-1 min-h-0 md:overflow-hidden">
 
               {/* ─ LEFT COLUMN (35%) ─ */}
-              <div className="w-full md:w-80 flex-shrink-0 flex flex-col gap-4 md:overflow-y-auto md:h-[calc(100vh-200px)]">
+              <div className="w-full md:w-80 flex-shrink-0 flex flex-col gap-4 md:overflow-y-auto md:h-[calc(100dvh-200px)]">
 
                 {/* Job info card */}
                 <div className="bg-white rounded-xl border border-slate-200 p-5">
@@ -1281,13 +1281,13 @@ export default function TailoringLab() {
                     </div>
 
                     {/* Bottom action bar */}
-                    <div className="flex-shrink-0 flex items-center gap-3 px-5 py-4 border-t border-slate-100 bg-slate-50/50">
+                    <div className="flex-shrink-0 flex flex-col md:flex-row md:items-center gap-2 md:gap-3 px-5 py-4 border-t border-slate-100 bg-slate-50/50">
                       {/* Download buttons — only shown when content exists */}
                       {tailoredCV && (
                         <button
                           onClick={() => handleDownload('cv')}
                           disabled={downloading === 'cv'}
-                          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border border-slate-200 text-slate-600 hover:bg-white hover:border-slate-300 transition-all disabled:opacity-60"
+                          className="flex items-center justify-center gap-1.5 w-full md:w-auto px-4 py-3 md:py-2 rounded-lg text-sm font-medium border border-slate-200 text-slate-600 hover:bg-white hover:border-slate-300 transition-all disabled:opacity-60"
                         >
                           {downloading === 'cv'
                             ? <div className="w-3.5 h-3.5 rounded-full border border-slate-400/30 border-t-slate-500 animate-spin" />
@@ -1303,7 +1303,7 @@ export default function TailoringLab() {
                         <button
                           onClick={() => handleDownload('cover')}
                           disabled={downloading === 'cover'}
-                          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border border-slate-200 text-slate-600 hover:bg-white hover:border-slate-300 transition-all disabled:opacity-60"
+                          className="flex items-center justify-center gap-1.5 w-full md:w-auto px-4 py-3 md:py-2 rounded-lg text-sm font-medium border border-slate-200 text-slate-600 hover:bg-white hover:border-slate-300 transition-all disabled:opacity-60"
                         >
                           {downloading === 'cover'
                             ? <div className="w-3.5 h-3.5 rounded-full border border-slate-400/30 border-t-slate-500 animate-spin" />
@@ -1315,14 +1315,14 @@ export default function TailoringLab() {
                         </button>
                       )}
 
-                      {/* Spacer */}
-                      <div className="flex-1" />
+                      {/* Spacer — desktop only */}
+                      <div className="hidden md:block flex-1" />
 
                       {/* Add to Tracker */}
                       <button
                         onClick={handleAddToTracker}
                         disabled={addedToTracker}
-                        className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold transition-all ${
+                        className={`flex items-center justify-center gap-2 w-full md:w-auto px-5 py-3 md:py-2 rounded-lg text-sm font-semibold transition-all ${
                           addedToTracker
                             ? 'bg-green-50 text-green-700 border border-green-200 cursor-default'
                             : 'text-white shadow-sm shadow-blue-500/20 hover:opacity-90'

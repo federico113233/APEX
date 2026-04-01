@@ -160,7 +160,7 @@ export default function Onboarding() {
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }))
 
   const inputCls =
-    'w-full px-4 py-2.5 rounded-lg border border-slate-200 text-slate-900 placeholder-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow text-sm'
+    'w-full px-4 py-3 rounded-lg border border-slate-200 text-slate-900 placeholder-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow text-base'
 
   const handleFinish = async () => {
     await updateProfile({
@@ -288,30 +288,31 @@ export default function Onboarding() {
         </p>
         <div className="space-y-6">
           <Field label="Salary range" hint="(annual gross, optional)">
-            <div className="flex items-center gap-2">
-              <select
-                value={form.salaryCurrency}
-                onChange={(e) => set('salaryCurrency', e.target.value)}
-                className="px-3 py-2.5 rounded-lg border border-slate-200 text-apex-text bg-white focus:outline-none focus:ring-2 focus:ring-apex-blue"
-              >
-                {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <input
-                type="number"
-                min="0"
-                value={form.salaryMin}
-                onChange={(e) => set('salaryMin', e.target.value)}
-                placeholder="Min"
-                className="w-28 px-3 py-2.5 rounded-lg border border-slate-200 text-apex-text placeholder-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-apex-blue"
-              />
-              <span className="text-apex-muted">–</span>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <select
+                  value={form.salaryCurrency}
+                  onChange={(e) => set('salaryCurrency', e.target.value)}
+                  className="px-3 py-3 rounded-lg border border-slate-200 text-apex-text bg-white focus:outline-none focus:ring-2 focus:ring-apex-blue flex-shrink-0"
+                >
+                  {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <input
+                  type="number"
+                  min="0"
+                  value={form.salaryMin}
+                  onChange={(e) => set('salaryMin', e.target.value)}
+                  placeholder="Min"
+                  className="flex-1 min-w-0 px-3 py-3 rounded-lg border border-slate-200 text-apex-text placeholder-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-apex-blue"
+                />
+              </div>
               <input
                 type="number"
                 min="0"
                 value={form.salaryMax}
                 onChange={(e) => set('salaryMax', e.target.value)}
                 placeholder="Max"
-                className="w-28 px-3 py-2.5 rounded-lg border border-slate-200 text-apex-text placeholder-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-apex-blue"
+                className="w-full px-3 py-3 rounded-lg border border-slate-200 text-apex-text placeholder-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-apex-blue"
               />
             </div>
             {form.salaryMin && form.salaryMax && (
@@ -343,22 +344,22 @@ export default function Onboarding() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      <header className="px-6 py-5">
+    <div className="min-h-dvh bg-slate-50 flex flex-col pb-24 md:pb-0">
+      <header className="px-5 md:px-6 py-5 flex-shrink-0">
         <Link to="/">
           <img src="/apex_full_logo.png" alt="APEX" className="h-8 w-auto object-contain" />
         </Link>
       </header>
 
-      <main className="flex-1 flex items-center justify-center px-6 py-10">
+      <main className="flex-1 flex items-start md:items-center justify-center px-5 md:px-6 py-6 md:py-10">
         <div className="w-full max-w-lg">
           <StepIndicator step={step} />
 
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 md:p-8">
             {steps[step]}
 
-            {/* Navigation */}
-            <div className="flex gap-3 mt-8">
+            {/* Navigation — hidden on mobile (shown in fixed footer below) */}
+            <div className="hidden md:flex gap-3 mt-8">
               {step > 1 && (
                 <button
                   type="button"
@@ -392,15 +393,12 @@ export default function Onboarding() {
               )}
             </div>
 
-            {/* Skip CV on last step */}
+            {/* Desktop skip CV */}
             {step === TOTAL && !form.cvText && (
-              <p className="text-center mt-3">
+              <p className="hidden md:block text-center mt-3">
                 <button
                   type="button"
-                  onClick={async () => {
-                    set('cvText', ' ')
-                    await handleFinish()
-                  }}
+                  onClick={async () => { set('cvText', ' '); await handleFinish() }}
                   className="text-sm text-apex-muted hover:text-apex-text underline underline-offset-2"
                 >
                   Skip for now — I'll add it later in Profile
@@ -411,7 +409,57 @@ export default function Onboarding() {
         </div>
       </main>
 
-      <footer className="flex justify-center pb-8 pt-4">
+      {/* ── Mobile: fixed bottom navigation bar ── */}
+      <div
+        className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 px-5 pt-3"
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}
+      >
+        <div className="flex gap-3">
+          {step > 1 && (
+            <button
+              type="button"
+              onClick={() => setStep((s) => s - 1)}
+              className="px-5 py-3.5 rounded-xl border border-slate-200 font-semibold text-slate-600 bg-white text-sm min-h-[48px]"
+            >
+              ← Back
+            </button>
+          )}
+          {step < TOTAL ? (
+            <button
+              type="button"
+              disabled={!canContinue[step]}
+              onClick={() => setStep((s) => s + 1)}
+              className="flex-1 py-3.5 rounded-xl font-semibold text-white text-sm hover:opacity-90 transition-opacity disabled:opacity-40 min-h-[48px]"
+              style={{ background: 'linear-gradient(135deg, #2563EB, #38BDF8)' }}
+            >
+              Continue →
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={!canContinue[4]}
+              onClick={handleFinish}
+              className="flex-1 py-3.5 rounded-xl font-semibold text-white text-sm hover:opacity-90 transition-opacity disabled:opacity-40 min-h-[48px]"
+              style={{ background: 'linear-gradient(135deg, #2563EB, #38BDF8)' }}
+            >
+              Enter APEX →
+            </button>
+          )}
+        </div>
+        {step === TOTAL && !form.cvText && (
+          <p className="text-center mt-2 pb-1">
+            <button
+              type="button"
+              onClick={async () => { set('cvText', ' '); await handleFinish() }}
+              className="text-sm text-apex-muted hover:text-apex-text underline underline-offset-2"
+            >
+              Skip for now
+            </button>
+          </p>
+        )}
+      </div>
+
+      <footer className="hidden md:flex justify-center pb-8 pt-4">
         <img src="/apex_x_blue.png" alt="" aria-hidden="true" className="w-5 h-5 object-contain" style={{ opacity: 0.35 }} />
       </footer>
     </div>

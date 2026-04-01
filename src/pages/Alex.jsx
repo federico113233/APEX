@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, memo } from 'react'
 import { useUser } from '../context/UserContext'
 import { supabase } from '../lib/supabase'
 import posthog from 'posthog-js'
@@ -396,12 +396,12 @@ function AlexSidebar({ conversations, activeId, onNew, onSelect, onRename, onDel
   )
 }
 
-function ChatBubble({ role, text, isStreaming }) {
+const ChatBubble = memo(function ChatBubble({ role, text, isStreaming, isMobile }) {
   const isAlex = role === 'assistant'
 
   if (isAlex) {
     return (
-      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', maxWidth: '75%' }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', maxWidth: isMobile ? '85%' : '75%' }}>
         <div style={{
           width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
           background: 'linear-gradient(135deg,#2563EB,#38BDF8)',
@@ -414,6 +414,8 @@ function ChatBubble({ role, text, isStreaming }) {
           padding: '13px 18px', background: '#F1F5F9',
           borderRadius: '4px 12px 12px 12px',
           boxShadow: '0 1px 4px rgba(15,23,42,0.06)',
+          willChange: isStreaming ? 'contents' : undefined,
+          minHeight: isStreaming ? 40 : undefined,
         }}>
           <MarkdownText text={text} />
           {isStreaming && (
@@ -431,7 +433,7 @@ function ChatBubble({ role, text, isStreaming }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
       <div style={{
-        maxWidth: '75%', padding: '12px 18px',
+        maxWidth: isMobile ? '85%' : '75%', padding: '12px 18px',
         background: 'linear-gradient(135deg,#2563EB,#38BDF8)',
         borderRadius: '12px 4px 12px 12px',
         boxShadow: '0 2px 12px rgba(37,99,235,0.22)',
@@ -440,7 +442,7 @@ function ChatBubble({ role, text, isStreaming }) {
       </div>
     </div>
   )
-}
+})
 
 function TypingIndicator() {
   return (
@@ -584,11 +586,12 @@ export default function Alex() {
   const [streaming, setStreaming]     = useState(false)
   const [streamText, setStreamText]   = useState('')
   const [hasStarted, setHasStarted]   = useState(false)
-  const abortRef    = useRef(null)
-  const chatEndRef  = useRef(null)
-  const inputRef    = useRef(null)    // bottom bar
-  const centerRef   = useRef(null)    // center bar (empty state)
-  const convIdRef   = useRef(null)
+  const abortRef        = useRef(null)
+  const chatEndRef      = useRef(null)
+  const msgsContainerRef = useRef(null)
+  const inputRef        = useRef(null)    // bottom bar
+  const centerRef       = useRef(null)    // center bar (empty state)
+  const convIdRef       = useRef(null)
 
   // Conversations
   const [conversations, setConversations] = useState([])
@@ -614,10 +617,21 @@ export default function Alex() {
 
   useEffect(() => { loadConversations() }, [userId]) // eslint-disable-line
 
-  // Auto-scroll on new messages
+  // Smooth scroll when a new message is added to the list
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [displayMsgs, streamText])
+  }, [displayMsgs])
+
+  // During streaming: only scroll if the user is already near the bottom
+  useEffect(() => {
+    if (!streaming || !streamText) return
+    const container = msgsContainerRef.current
+    if (!container) return
+    const { scrollTop, scrollHeight, clientHeight } = container
+    if (scrollHeight - scrollTop - clientHeight < 150) {
+      chatEndRef.current?.scrollIntoView({ behavior: 'instant' })
+    }
+  }, [streamText, streaming])
 
   // Focus bottom input after transition to chat
   useEffect(() => {
@@ -877,7 +891,7 @@ export default function Alex() {
       <div style={{
         display: 'flex',
         flexDirection: isMobile ? 'column' : 'row',
-        height: isMobile ? 'calc(100vh - 120px)' : '100vh',
+        height: isMobile ? 'calc(100dvh - 120px)' : '100dvh',
         overflow: 'hidden',
       }}>
 
@@ -946,7 +960,7 @@ export default function Alex() {
             style={{
               position: 'absolute', inset: 0, zIndex: 2,
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              padding: isMobile ? '0 20px 40px' : '0 48px 64px',
+              padding: isMobile ? '0 20px' : '0 48px',
               background: '#F8FAFC',
               opacity: hasStarted ? 0 : 1,
               pointerEvents: hasStarted ? 'none' : 'auto',
@@ -979,11 +993,15 @@ export default function Alex() {
 
               <div style={{
                 display: 'flex',
-                flexDirection: isMobile ? 'column' : 'row',
-                flexWrap: isMobile ? undefined : 'wrap',
+                flexDirection: 'row',
+                flexWrap: isMobile ? 'nowrap' : 'wrap',
                 gap: 8,
                 marginTop: 18,
                 justifyContent: isMobile ? undefined : 'center',
+                overflowX: isMobile ? 'auto' : undefined,
+                WebkitOverflowScrolling: isMobile ? 'touch' : undefined,
+                scrollbarWidth: isMobile ? 'none' : undefined,
+                paddingBottom: isMobile ? 4 : undefined,
               }}>
                 {SUGGESTION_PILLS.map(pill => (
                   <SuggestionPill key={pill} label={pill} onClick={() => sendMessage(pill)} mobile={isMobile} />
@@ -1000,6 +1018,7 @@ export default function Alex() {
           }}>
             {/* Messages */}
             <div
+              ref={msgsContainerRef}
               className="alex-msgs"
               style={{
                 flex: 1, minHeight: 0, overflowY: 'auto',
@@ -1009,10 +1028,10 @@ export default function Alex() {
               }}
             >
               {displayMsgs.map((m, i) => (
-                <ChatBubble key={i} role={m.role} text={m.text} />
+                <ChatBubble key={i} role={m.role} text={m.text} isMobile={isMobile} />
               ))}
               {streaming && streamText && (
-                <ChatBubble role="assistant" text={streamText} isStreaming />
+                <ChatBubble role="assistant" text={streamText} isStreaming isMobile={isMobile} />
               )}
               {streaming && !streamText && <TypingIndicator />}
               <div ref={chatEndRef} style={{ height: 4 }} />

@@ -141,13 +141,16 @@ export default function Dashboard() {
 
   return (
     <>
-      <div style={{ background: '#F8FAFC', minHeight: '100vh' }}>
+      <div style={{ background: '#F8FAFC', minHeight: '100dvh' }}>
 
         {/* ── HERO ── */}
         <div style={{
           background: '#0F172A',
           borderRadius: '0 0 28px 28px',
-          padding: isMobile ? '28px 16px 60px' : '44px 40px 80px',
+          paddingTop: isMobile ? '28px' : '44px',
+          paddingBottom: isMobile ? '60px' : '80px',
+          paddingLeft: isMobile ? 'max(16px, env(safe-area-inset-left))' : '40px',
+          paddingRight: isMobile ? 'max(16px, env(safe-area-inset-right))' : '40px',
           position: 'relative',
           overflow: 'hidden',
         }}>

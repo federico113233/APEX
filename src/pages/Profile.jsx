@@ -347,35 +347,36 @@ function PreferencesModal({ onClose }) {
         <PillGroup options={WORK_MODES} value={form.workMode} onChange={(v) => set('workMode', v)} />
       </Field>
       <Field label="Salary range" hint="(annual gross, optional)">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <select
-            value={form.salaryCurrency}
-            onChange={(e) => set('salaryCurrency', e.target.value)}
-            style={{
-              padding: '9px 12px', borderRadius: 10,
-              border: '1.5px solid #E2E8F0', fontSize: 14,
-              color: '#0F172A', background: '#fff',
-              outline: 'none', fontFamily: 'inherit', cursor: 'pointer',
-            }}
-          >
-            {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <input
-            type="number" min="0"
-            value={form.salaryMin}
-            onChange={(e) => set('salaryMin', e.target.value)}
-            placeholder="Min"
-            style={{ flex: 1, padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E2E8F0', fontSize: 14, color: '#0F172A', background: '#fff', outline: 'none', fontFamily: 'inherit' }}
-            onFocus={(e) => { e.target.style.borderColor = '#2563EB'; e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.1)' }}
-            onBlur={(e)  => { e.target.style.borderColor = '#E2E8F0'; e.target.style.boxShadow = 'none' }}
-          />
-          <span style={{ color: '#94A3B8', fontSize: 14, flexShrink: 0 }}>–</span>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <select
+              value={form.salaryCurrency}
+              onChange={(e) => set('salaryCurrency', e.target.value)}
+              style={{
+                padding: '9px 12px', borderRadius: 10,
+                border: '1.5px solid #E2E8F0', fontSize: 14,
+                color: '#0F172A', background: '#fff',
+                outline: 'none', fontFamily: 'inherit', cursor: 'pointer', flexShrink: 0,
+              }}
+            >
+              {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <input
+              type="number" min="0"
+              value={form.salaryMin}
+              onChange={(e) => set('salaryMin', e.target.value)}
+              placeholder="Min"
+              style={{ flex: 1, minWidth: 0, padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E2E8F0', fontSize: 14, color: '#0F172A', background: '#fff', outline: 'none', fontFamily: 'inherit' }}
+              onFocus={(e) => { e.target.style.borderColor = '#2563EB'; e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.1)' }}
+              onBlur={(e)  => { e.target.style.borderColor = '#E2E8F0'; e.target.style.boxShadow = 'none' }}
+            />
+          </div>
           <input
             type="number" min="0"
             value={form.salaryMax}
             onChange={(e) => set('salaryMax', e.target.value)}
             placeholder="Max"
-            style={{ flex: 1, padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E2E8F0', fontSize: 14, color: '#0F172A', background: '#fff', outline: 'none', fontFamily: 'inherit' }}
+            style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #E2E8F0', fontSize: 14, color: '#0F172A', background: '#fff', outline: 'none', fontFamily: 'inherit' }}
             onFocus={(e) => { e.target.style.borderColor = '#2563EB'; e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.1)' }}
             onBlur={(e)  => { e.target.style.borderColor = '#E2E8F0'; e.target.style.boxShadow = 'none' }}
           />
@@ -521,7 +522,7 @@ export default function Profile() {
     <>
       <style>{`@keyframes modal-spin { to { transform: rotate(360deg) } }`}</style>
 
-      <div style={{ background: '#F8FAFC', minHeight: '100vh', padding: isMobile ? '24px 16px' : '40px 32px', boxSizing: 'border-box' }}>
+      <div style={{ background: '#F8FAFC', minHeight: '100dvh', padding: isMobile ? '24px 16px' : '40px 32px', boxSizing: 'border-box' }}>
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
 
           {/* Header */}

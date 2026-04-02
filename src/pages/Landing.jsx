@@ -484,9 +484,9 @@ function TheProblem() {
             <span className="text-slate-800 font-normal">
               The right CV. The right cover letter. The right answers in the interview room.
             </span>
-            {' '}Most don't — not because they're less capable, but because{' '}
-            <span className="text-slate-900 font-semibold">nobody showed them how.</span>
-            {' '}APEX is the advisor that does."
+            {' '}Most don't, not because they're less capable, but because{' '}
+            <span className="text-slate-900">nobody showed them how.</span>
+            {' '}<span className="text-slate-900 font-semibold">APEX is the advisor that does."</span>
           </p>
         </FadeIn>
       </div>

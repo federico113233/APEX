@@ -310,6 +310,7 @@ function buildGCalUrl({ title, date, startTime, endTime, notes, location }) {
 
 function CalendarModal({ app, onClose, onAdded }) {
   const [visible, setVisible] = useState(false)
+  const isMobileModal = typeof window !== 'undefined' && window.innerWidth < 768
   const today = new Date().toISOString().slice(0, 10)
   const [date, setDate]           = useState(today)
   const [startTime, setStartTime] = useState('10:00')
@@ -378,13 +379,15 @@ function CalendarModal({ app, onClose, onAdded }) {
           opacity: visible ? 1 : 0,
           transition: 'transform 0.22s cubic-bezier(0.34,1.56,0.64,1), opacity 0.18s',
           zIndex: 101,
-          width: '100%',
+          width: isMobileModal ? 'calc(100% - 32px)' : '100%',
           maxWidth: 460,
           background: '#fff',
           borderRadius: 20,
           boxShadow: '0 25px 60px rgba(15,23,42,0.18), 0 0 0 1px rgba(15,23,42,0.06)',
-          padding: '28px 28px 24px',
+          padding: isMobileModal ? '24px 20px 20px' : '28px 28px 24px',
           boxSizing: 'border-box',
+          maxHeight: 'calc(100dvh - 80px)',
+          overflowY: 'auto',
         }}
       >
         {/* Header */}
@@ -541,6 +544,7 @@ function CalendarModal({ app, onClose, onAdded }) {
 // ── "Job added" toast ─────────────────────────────────────────────────────────
 function JobAddedToast({ onHide }) {
   const [visible, setVisible] = useState(false)
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
 
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true))
@@ -555,7 +559,7 @@ function JobAddedToast({ onHide }) {
     <div
       style={{
         position: 'fixed',
-        bottom: 28,
+        bottom: isMobile ? 88 : 28,
         left: '50%',
         transform: visible ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(20px)',
         opacity: visible ? 1 : 0,
@@ -586,6 +590,7 @@ function JobAddedToast({ onHide }) {
 // ── Toast notification ─────────────────────────────────────────────────────────
 function CalendarToast({ onHide }) {
   const [visible, setVisible] = useState(false)
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
 
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true))
@@ -600,7 +605,7 @@ function CalendarToast({ onHide }) {
     <div
       style={{
         position: 'fixed',
-        bottom: 28,
+        bottom: isMobile ? 88 : 28,
         left: '50%',
         transform: visible ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(20px)',
         opacity: visible ? 1 : 0,
@@ -768,13 +773,13 @@ function DetailPanel({ app, onClose, onStatusChange, onNotesChange, onDelete }) 
         </div>
 
         {/* ── Tabs ── */}
-        <div style={{ display: 'flex', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
+        <div style={{ display: 'flex', borderBottom: '1px solid #f1f5f9', flexShrink: 0, overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
           {tabs.map(({ key, label }) => (
             <button
               key={key}
               onClick={() => setActiveTab(key)}
               style={{
-                padding: '12px 20px',
+                padding: isMobile ? '12px 14px' : '12px 20px',
                 fontSize: 13,
                 fontWeight: 500,
                 border: 'none',
@@ -784,6 +789,8 @@ function DetailPanel({ app, onClose, onStatusChange, onNotesChange, onDelete }) 
                 cursor: 'pointer',
                 transition: 'color 0.15s',
                 marginBottom: -1,
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
               }}
             >
               {label}

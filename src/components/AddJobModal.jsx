@@ -6,6 +6,7 @@ export default function AddJobModal({ onClose, onAdded }) {
   const { addManualJob } = useUser()
   const navigate = useNavigate()
   const [visible, setVisible] = useState(false)
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
   const [title, setTitle]           = useState('')
   const [company, setCompany]       = useState('')
   const [location, setLocation]     = useState('')
@@ -126,14 +127,14 @@ export default function AddJobModal({ onClose, onAdded }) {
           opacity: visible ? 1 : 0,
           transition: 'transform 0.22s cubic-bezier(0.34,1.56,0.64,1), opacity 0.18s',
           zIndex: 101,
-          width: '100%',
+          width: isMobile ? 'calc(100% - 32px)' : '100%',
           maxWidth: 560,
           background: '#fff',
           borderRadius: 20,
           boxShadow: '0 25px 60px rgba(15,23,42,0.18), 0 0 0 1px rgba(15,23,42,0.06)',
-          padding: '28px 28px 24px',
+          padding: isMobile ? '24px 20px 20px' : '28px 28px 24px',
           boxSizing: 'border-box',
-          maxHeight: '90vh',
+          maxHeight: 'calc(100dvh - 80px)',
           overflowY: 'auto',
         }}
       >
@@ -200,7 +201,7 @@ export default function AddJobModal({ onClose, onAdded }) {
         </div>
 
         {/* Location + URL row */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12, marginBottom: 16 }}>
           <div>
             <label style={labelStyle}>
               Location <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: '#94a3b8' }}>(optional)</span>

@@ -536,7 +536,7 @@ export default function Profile() {
           </div>
 
           {/* 2 × 2 grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
 
             {/* Personal Info */}
             <SummaryCard

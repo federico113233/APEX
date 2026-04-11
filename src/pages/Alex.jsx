@@ -993,15 +993,11 @@ export default function Alex() {
 
               <div style={{
                 display: 'flex',
-                flexDirection: 'row',
-                flexWrap: isMobile ? 'nowrap' : 'wrap',
+                flexDirection: isMobile ? 'column' : 'row',
+                flexWrap: isMobile ? undefined : 'wrap',
                 gap: 8,
                 marginTop: 18,
                 justifyContent: isMobile ? undefined : 'center',
-                overflowX: isMobile ? 'auto' : undefined,
-                WebkitOverflowScrolling: isMobile ? 'touch' : undefined,
-                scrollbarWidth: isMobile ? 'none' : undefined,
-                paddingBottom: isMobile ? 4 : undefined,
               }}>
                 {SUGGESTION_PILLS.map(pill => (
                   <SuggestionPill key={pill} label={pill} onClick={() => sendMessage(pill)} mobile={isMobile} />

@@ -320,7 +320,7 @@ export default function Dashboard() {
                 }}>
                   Quick actions
                 </p>
-                <div style={isMobile ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } : { display: 'flex', gap: 10 }}>
+                <div style={isMobile ? { display: 'flex', flexDirection: 'column', gap: 10 } : { display: 'flex', gap: 10 }}>
                   {QUICK_ACTIONS.map(qa => (
                     <QuickActionCard key={qa.to} {...qa} />
                   ))}

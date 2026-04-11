@@ -899,8 +899,8 @@ export default function TailoringLab() {
             /* ── Two-column layout ── */
             <div className="flex flex-col md:flex-row gap-6 flex-1 min-h-0 md:overflow-hidden">
 
-              {/* ─ LEFT COLUMN (35%) ─ */}
-              <div className="w-full md:w-80 flex-shrink-0 flex flex-col gap-4 md:overflow-y-auto md:h-[calc(100dvh-200px)]">
+              {/* ─ LEFT COLUMN (35%) — order-2 on mobile so CV shows first ─ */}
+              <div className="w-full md:w-80 flex-shrink-0 flex flex-col gap-4 md:overflow-y-auto md:h-[calc(100dvh-200px)] order-2 md:order-1">
 
                 {/* Job info card */}
                 <div className="bg-white rounded-xl border border-slate-200 p-5">
@@ -1056,8 +1056,8 @@ export default function TailoringLab() {
                 )}
               </div>
 
-              {/* ─ RIGHT COLUMN (flex-1) ─ */}
-              <div className="flex-1 min-w-0 flex flex-col md:overflow-hidden">
+              {/* ─ RIGHT COLUMN (flex-1) — order-1 on mobile so CV shows first ─ */}
+              <div className="flex-1 min-w-0 flex flex-col md:overflow-hidden order-1 md:order-2">
 
                 {/* Idle */}
                 {phase === 'idle' && (
@@ -1185,8 +1185,8 @@ export default function TailoringLab() {
                         </button>
                       ))}
                       <div className="ml-auto flex items-center gap-3 px-4">
-                        {/* Preview / Edit toggle */}
-                        <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
+                        {/* Preview / Edit toggle — desktop only */}
+                        <div className="hidden md:flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
                           {['preview', 'edit'].map(mode => (
                             <button
                               key={mode}

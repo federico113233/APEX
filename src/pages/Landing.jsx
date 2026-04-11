@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react'
-import { motion, useInView, useScroll, useTransform, AnimatePresence } from 'framer-motion'
+import { motion, useInView } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 
 /* ─── Brand gradient ─── */
@@ -133,10 +133,13 @@ function GhostBtn({ children, onClick, className = '' }) {
 
 function Navbar() {
   const navigate = useNavigate()
-  const { scrollY } = useScroll()
   const [scrolled, setScrolled] = useState(false)
 
-  useEffect(() => scrollY.on('change', (v) => setScrolled(v > 8)), [scrollY])
+  useEffect(() => {
+    const handler = () => setScrolled(window.scrollY > 8)
+    window.addEventListener('scroll', handler, { passive: true })
+    return () => window.removeEventListener('scroll', handler)
+  }, [])
 
   const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
 
@@ -213,29 +216,14 @@ function Hero() {
 
       <div className="relative z-10 pt-32 pb-20 max-w-4xl mx-auto px-6 text-center w-full">
 
-        {/* Badge */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.85, y: 8 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ ...spring, delay: 0.05 }}
-        >
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-wide text-blue-600 uppercase bg-blue-50 border border-blue-100 rounded-full px-3.5 py-1.5">
-            <motion.span
-              className="w-1.5 h-1.5 rounded-full bg-blue-500"
-              animate={{ scale: [1, 1.6, 1], opacity: [1, 0.5, 1] }}
-              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-            />
-            AI-Powered Career Advisor
-          </span>
-        </motion.div>
 
-        {/* Headline — word by word */}
+        {/* Headline */}
         <div className="mt-6">
           <h1 className="text-5xl md:text-7xl font-bold text-slate-900 tracking-tight leading-none">
-            <SplitWords text="The career advisor you never had." baseDelay={0.1} />
+            The career advisor you never had.
           </h1>
           <p className="text-5xl md:text-7xl font-bold text-blue-600 tracking-tight leading-none mt-2">
-            <SplitWords text="Now you do." baseDelay={0.4} />
+            Now you do.
           </p>
         </div>
 
@@ -999,15 +987,15 @@ function Footer() {
 
 export default function Landing() {
   return (
-    <div className="bg-white overflow-x-hidden">
+    <div className="bg-white">
       <Navbar />
       <Hero />
       <SocialProof />
       <TheProblem />
-      <FeatureMyJobs />
-      <FeatureTailoring />
-      <FeatureTracker />
       <AlexSpotlight />
+      <FeatureTailoring />
+      <FeatureMyJobs />
+      <FeatureTracker />
       <Pricing />
       <FinalCTA />
       <Footer />

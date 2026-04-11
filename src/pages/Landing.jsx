@@ -194,237 +194,145 @@ function Hero() {
   const navigate = useNavigate()
 
   return (
-    <section
-      className="min-h-screen relative overflow-hidden flex flex-col items-center justify-center"
-      style={{ background: 'radial-gradient(ellipse 80% 50% at 50% -10%, rgba(59,130,246,0.07) 0%, transparent 68%)' }}
-    >
-      {/* Watermark — only covers viewport height so it stays behind headline text */}
-      <div className="absolute top-0 left-0 right-0 h-screen flex items-center justify-center pointer-events-none overflow-hidden">
-        <motion.img
-          src="/apex_x_blue.png"
-          aria-hidden="true"
-          className="w-[620px] h-[620px] object-contain select-none"
-          style={{ mixBlendMode: 'multiply' }}
-          initial={{ opacity: 0, scale: 1.1 }}
-          animate={{ opacity: 0.045, scale: 1 }}
-          transition={{ duration: 1.4, ease }}
-        />
-      </div>
-
-      <div className="relative z-10 pt-32 pb-20 max-w-4xl mx-auto px-6 text-center w-full">
-
-        {/* Badge */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.85, y: 8 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ ...spring, delay: 0.05 }}
-        >
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-wide text-blue-600 uppercase bg-blue-50 border border-blue-100 rounded-full px-3.5 py-1.5">
-            <motion.span
-              className="w-1.5 h-1.5 rounded-full bg-blue-500"
-              animate={{ scale: [1, 1.6, 1], opacity: [1, 0.5, 1] }}
-              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-            />
-            AI-Powered Career Advisor
-          </span>
-        </motion.div>
-
-        {/* Headline — word by word */}
-        <div className="mt-6">
-          <h1 className="text-5xl md:text-7xl font-bold text-slate-900 tracking-tight leading-none">
-            <SplitWords text="The career advisor you never had." baseDelay={0.1} />
-          </h1>
-          <p className="text-5xl md:text-7xl font-bold text-blue-600 tracking-tight leading-none mt-2">
-            <SplitWords text="Now you do." baseDelay={0.4} />
-          </p>
-        </div>
-
-        {/* Sub */}
-        <motion.p
-          className="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto mt-7 leading-relaxed"
-          initial={{ opacity: 0, y: 16, filter: 'blur(6px)' }}
-          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-          transition={{ duration: 0.7, delay: 0.65, ease }}
-        >
-          APEX tailors your CV, writes your cover letter, and guides your career — powered by AI that actually knows who you are.
-        </motion.p>
-
-        {/* CTAs */}
-        <motion.div
-          className="flex items-center justify-center gap-3 mt-10"
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.55, delay: 0.8, ease }}
-        >
-          <GradBtn onClick={() => navigate('/login')} className="text-sm shadow-lg shadow-blue-500/20">
-            Get started free →
-          </GradBtn>
-          <GhostBtn onClick={() => navigate('/login')} className="text-sm px-6 py-3">
-            Sign in
-          </GhostBtn>
-        </motion.div>
-
-        {/* Trust line */}
-        <motion.p
-          className="text-xs text-slate-400 mt-3"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.6, delay: 1.0 }}
-        >
-          Free during beta · No credit card required
-        </motion.p>
-
-        {/* Dashboard mockup */}
-        <motion.div
-          className="mt-16 max-w-5xl mx-auto"
-          initial={{ scale: 0.96, opacity: 0, y: 24 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.9, ease }}
-        >
-          {/* Gentle float loop */}
-          <motion.div
-            animate={{ y: [0, -7, 0] }}
-            transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
-          >
-            <div className="rounded-2xl border border-slate-200 shadow-2xl overflow-hidden bg-white">
-              {/* Chrome bar */}
-              <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-red-400 shrink-0" />
-                <span className="w-3 h-3 rounded-full bg-yellow-400 shrink-0" />
-                <span className="w-3 h-3 rounded-full bg-green-400 shrink-0" />
-                <div className="bg-white border border-slate-200 rounded-md flex-1 max-w-xs mx-auto px-3 py-1 text-xs text-slate-400 text-center select-none">
-                  apexapply.app
-                </div>
-              </div>
-
-              {/* App shell */}
-              <div className="flex" style={{ minHeight: 420 }}>
-
-                {/* Sidebar */}
-                <div className="hidden md:flex w-52 bg-white border-r border-slate-100 py-4 px-3 flex-col shrink-0">
-                  <div className="px-2 mb-5">
-                    <img src="/apex_full_logo.png" alt="apex" className="h-5 w-auto object-contain" />
-                  </div>
-                  {[
-                    { label: 'Dashboard', active: true },
-                    { label: 'My Jobs', active: false },
-                    { label: 'Tailoring Lab', active: false, badge: '3' },
-                    { label: 'Tracker', active: false },
-                    { label: 'Alex', active: false },
-                    { label: 'Profile', active: false },
-                  ].map(({ label, active, badge }) => (
-                    <div
-                      key={label}
-                      className={`flex items-center justify-between py-1.5 px-3 rounded-lg text-xs mb-0.5 select-none ${
-                        active ? 'text-blue-600 font-semibold bg-blue-50 border-l-2 border-blue-500' : 'text-slate-500'
-                      }`}
-                    >
-                      <span>{label}</span>
-                      {badge && (
-                        <span className="text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold" style={{ background: grad }}>
-                          {badge}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                  <div className="mt-auto pt-4 border-t border-slate-100">
-                    <div className="flex items-center gap-2 px-2 mb-2">
-                      <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-white text-xs font-bold" style={{ background: grad }}>
-                        FB
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-slate-800 truncate">Federico Balucani</p>
-                        <p className="text-[10px] text-slate-400 truncate">federico.balucani@gmail.com</p>
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-slate-400 px-2 select-none">← Back to Home</p>
-                    <p className="text-[10px] text-slate-400 px-2 mt-1 select-none">Sign out</p>
-                  </div>
-                </div>
-
-                {/* Main */}
-                <div className="flex-1 flex flex-col min-w-0">
-                  {/* Dark header */}
-                  <div className="bg-slate-900 px-5 py-4 select-none">
-                    <p className="text-lg font-bold text-white leading-tight">Good morning, Federico</p>
-                    <p className="text-xs text-slate-400 mt-0.5">You have 1 interview scheduled. Here's your overview.</p>
-                    <p className="text-[10px] text-slate-500 mt-1">3 applications · 1 interview · 3 drafts</p>
-                  </div>
-
-                  {/* Content row */}
-                  <div className="flex flex-1 bg-slate-50 min-h-0">
-                    {/* Left column */}
-                    <div className="flex-1 p-4 min-w-0">
-                      {/* Alex card */}
-                      <div className="rounded-2xl p-4 mb-3 select-none" style={{ background: grad }}>
-                        <p className="text-[10px] font-bold text-blue-100 uppercase tracking-widest mb-1.5">ALEX · AI CAREER ADVISOR</p>
-                        <p className="text-sm font-semibold text-white leading-snug">
-                          Most candidates apply and hope. You prepare and win.
-                        </p>
-                        <button className="mt-3 bg-white text-blue-600 text-[11px] font-semibold px-4 py-1.5 rounded-full">
-                          Talk to Alex &gt;
-                        </button>
-                      </div>
-
-                      {/* Quick actions */}
-                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-2 select-none">QUICK ACTIONS</p>
-                      <div className="grid grid-cols-3 gap-2">
-                        {[
-                          { label: 'My Jobs', sub: 'Your job inbox' },
-                          { label: 'Tailoring Lab', sub: 'CV & cover letter' },
-                          { label: 'Tracker', sub: 'All applications' },
-                        ].map(({ label, sub }) => (
-                          <div key={label} className="bg-white rounded-xl border border-slate-100 px-3 py-2.5 flex items-center justify-between select-none">
-                            <div className="min-w-0">
-                              <p className="text-xs font-semibold text-slate-800 truncate">{label}</p>
-                              <p className="text-[10px] text-slate-400 mt-0.5 truncate">{sub}</p>
-                            </div>
-                            <span className="text-slate-300 text-xs ml-1 shrink-0">›</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Right panel */}
-                    <div className="w-52 bg-white border-l border-slate-100 p-4 shrink-0 hidden lg:block select-none">
-                      <div className="flex items-center justify-between mb-3">
-                        <p className="text-xs font-bold text-slate-800">Applications</p>
-                        <span className="text-[10px] text-blue-600">View all ›</span>
-                      </div>
-                      {[
-                        { role: 'Mktg Manager – Group Lead', co: 'PVJets · Mar 10', status: 'Offer', c: 'text-green-600' },
-                        { role: 'Stage Marketing', co: 'Tradex Srl · Mar 10', status: 'Applied', c: 'text-blue-600' },
-                        { role: 'Marketing Intern', co: 'Nordberg Medical', status: 'Interview', c: 'text-amber-600' },
-                      ].map(({ role, co, status, c }) => (
-                        <div key={role} className="pb-2.5 mb-2.5 border-b border-slate-50 last:border-0">
-                          <p className="text-[10px] font-semibold text-slate-800 leading-tight truncate">{role}</p>
-                          <p className="text-[10px] text-slate-400 mt-0.5 truncate">{co}</p>
-                          <span className={`text-[10px] font-semibold ${c}`}>{status}</span>
-                        </div>
-                      ))}
-                      <div className="flex items-center justify-between mt-3 mb-2">
-                        <p className="text-xs font-bold text-slate-800">In progress</p>
-                        <span className="text-[10px] text-blue-600">Open Lab ›</span>
-                      </div>
-                      {[
-                        { role: 'Marketing Manager', co: 'Salt' },
-                        { role: 'Trade Marketing', co: 'Azienda Anonima' },
-                      ].map(({ role, co }) => (
-                        <div key={role} className="flex items-center justify-between pb-2 mb-2 border-b border-slate-50 last:border-0">
-                          <div className="min-w-0 mr-2">
-                            <p className="text-[10px] font-semibold text-slate-800 truncate">{role}</p>
-                            <p className="text-[10px] text-slate-400 truncate">{co}</p>
-                          </div>
-                          <span className="text-[10px] text-slate-400 shrink-0">Continue ›</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
+    <section className="min-h-screen relative overflow-hidden flex items-center bg-white">
+      <div className="relative z-10 w-full max-w-7xl mx-auto px-6 py-32">
+        <div className="flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
+          
+          {/* Left Column - Copy */}
+          <div className="flex-1 text-center lg:text-left">
+            {/* Headline */}
+            <div>
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold text-slate-900 tracking-tight leading-[1.1]">
+                <SplitWords text="The career advisor you never had." baseDelay={0.1} />
+              </h1>
+              <p className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold text-blue-600 tracking-tight leading-[1.1] mt-2">
+                <SplitWords text="Now you do." baseDelay={0.4} />
+              </p>
             </div>
+
+            {/* Subtitle */}
+            <motion.p
+              className="text-lg md:text-xl text-slate-400 max-w-xl mt-6 leading-relaxed mx-auto lg:mx-0"
+              initial={{ opacity: 0, y: 16, filter: 'blur(6px)' }}
+              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+              transition={{ duration: 0.7, delay: 0.65, ease }}
+            >
+              APEX tailors your CV, writes your cover letter, and guides your career — powered by AI that actually knows who you are.
+            </motion.p>
+
+            {/* CTAs */}
+            <motion.div
+              className="flex items-center justify-center lg:justify-start gap-3 mt-8"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.55, delay: 0.8, ease }}
+            >
+              <GradBtn onClick={() => navigate('/login')} className="text-sm shadow-lg shadow-blue-500/20">
+                Get started free →
+              </GradBtn>
+              <GhostBtn onClick={() => navigate('/login')} className="text-sm px-6 py-3">
+                Sign in
+              </GhostBtn>
+            </motion.div>
+
+            {/* Trust line */}
+            <motion.p
+              className="text-xs text-slate-400 mt-3 text-center lg:text-left"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.6, delay: 1.0 }}
+            >
+              Free during beta · No credit card required
+            </motion.p>
+          </div>
+
+          {/* Right Column - Chat Interface */}
+          <motion.div
+            className="flex-1 w-full max-w-md lg:max-w-lg"
+            initial={{ scale: 0.96, opacity: 0, x: 24 }}
+            animate={{ scale: 1, opacity: 1, x: 0 }}
+            transition={{ duration: 0.8, delay: 0.5, ease }}
+          >
+            {/* Gentle float loop */}
+            <motion.div
+              animate={{ y: [0, -8, 0] }}
+              transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl shadow-slate-200/50 overflow-hidden">
+                {/* Chat Header */}
+                <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
+                    <span className="text-white font-bold text-sm">A</span>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900 text-sm">Alex</p>
+                    <p className="text-xs text-slate-400">AI Career Advisor</p>
+                  </div>
+                </div>
+
+                {/* Chat Messages */}
+                <div className="p-5 space-y-4 bg-slate-50/50">
+                  {/* User Message */}
+                  <motion.div 
+                    className="flex justify-end"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.9, ease }}
+                  >
+                    <div className="bg-blue-600 text-white rounded-2xl rounded-br-md px-4 py-3 max-w-[85%] shadow-sm">
+                      <p className="text-sm leading-relaxed">
+                        Ho un colloquio da Bain & Company la settimana prossima. Non ho mai fatto un caso di consulenza. Da dove inizio?
+                      </p>
+                    </div>
+                  </motion.div>
+
+                  {/* Alex Response */}
+                  <motion.div 
+                    className="flex justify-start"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 1.2, ease }}
+                  >
+                    <div className="bg-white border border-slate-100 rounded-2xl rounded-bl-md px-4 py-3 max-w-[90%] shadow-sm">
+                      <p className="text-sm text-slate-700 leading-relaxed">
+                        Ottima domanda. Per un primo round da Bain ti consiglio di concentrarti su tre cose:
+                      </p>
+                      <div className="mt-3 space-y-2.5">
+                        <p className="text-sm text-slate-700 leading-relaxed">
+                          <span className="font-semibold text-slate-900">1) Struttura del caso:</span> impara i framework base (profitability, market entry, M&A). Il libro {"'"}Case in Point{"'"} è il riferimento standard.
+                        </p>
+                        <p className="text-sm text-slate-700 leading-relaxed">
+                          <span className="font-semibold text-slate-900">2) Mental math:</span> allenati a fare calcoli veloci a mente — ti chiederanno numeri durante il caso.
+                        </p>
+                        <p className="text-sm text-slate-700 leading-relaxed">
+                          <span className="font-semibold text-slate-900">3) Comunicazione:</span> pensa ad alta voce, non in silenzio. Bain vuole vedere il tuo processo logico, non solo la risposta.
+                        </p>
+                      </div>
+                      <p className="text-sm text-slate-700 leading-relaxed mt-3">
+                        Vuoi che ti prepari una lista di risorse specifiche?
+                      </p>
+                    </div>
+                  </motion.div>
+                </div>
+
+                {/* Input area hint */}
+                <div className="px-5 py-3 border-t border-slate-100 bg-white">
+                  <div className="flex items-center gap-2 text-slate-300">
+                    <div className="flex-1 bg-slate-50 rounded-xl px-4 py-2.5 text-sm">
+                      Scrivi un messaggio...
+                    </div>
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: grad }}>
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
           </motion.div>
-        </motion.div>
+
+        </div>
       </div>
     </section>
   )

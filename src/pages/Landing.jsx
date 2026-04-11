@@ -246,9 +246,9 @@ function Hero() {
             </motion.p>
           </div>
 
-          {/* Right Column - Chat Interface */}
+          {/* Right Column - Screenshot in Premium Frame */}
           <motion.div
-            className="flex-1 w-full max-w-md lg:max-w-lg"
+            className="flex-1 w-full max-w-md lg:max-w-xl"
             initial={{ scale: 0.96, opacity: 0, x: 24 }}
             animate={{ scale: 1, opacity: 1, x: 0 }}
             transition={{ duration: 0.8, delay: 0.5, ease }}
@@ -258,74 +258,50 @@ function Hero() {
               animate={{ y: [0, -8, 0] }}
               transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
             >
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl shadow-slate-200/50 overflow-hidden">
-                {/* Chat Header */}
-                <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
-                    <span className="text-white font-bold text-sm">A</span>
+              {/* Tilted app frame */}
+              <div 
+                className="relative"
+                style={{ transform: 'perspective(1200px) rotateY(-3deg) rotateX(2deg)' }}
+              >
+                {/* Shadow layer for depth */}
+                <div 
+                  className="absolute inset-0 rounded-2xl"
+                  style={{ 
+                    background: 'linear-gradient(135deg, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.15) 100%)',
+                    transform: 'translate(8px, 12px)',
+                    filter: 'blur(20px)',
+                  }}
+                />
+                
+                {/* Main frame */}
+                <div className="relative bg-white rounded-2xl border border-slate-200/80 shadow-2xl overflow-hidden">
+                  {/* Browser chrome bar */}
+                  <div className="bg-slate-50 border-b border-slate-100 px-4 py-3 flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-red-400 shrink-0" />
+                    <span className="w-3 h-3 rounded-full bg-yellow-400 shrink-0" />
+                    <span className="w-3 h-3 rounded-full bg-green-400 shrink-0" />
+                    <div className="bg-white border border-slate-200 rounded-md flex-1 max-w-[200px] mx-auto px-3 py-1 text-xs text-slate-400 text-center select-none">
+                      apexapply.app/alex
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-semibold text-slate-900 text-sm">Alex</p>
-                    <p className="text-xs text-slate-400">AI Career Advisor</p>
-                  </div>
-                </div>
 
-                {/* Chat Messages */}
-                <div className="p-5 space-y-4 bg-slate-50/50">
-                  {/* User Message */}
-                  <motion.div 
-                    className="flex justify-end"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.9, ease }}
-                  >
-                    <div className="bg-blue-600 text-white rounded-2xl rounded-br-md px-4 py-3 max-w-[85%] shadow-sm">
-                      <p className="text-sm leading-relaxed">
-                        Ho un colloquio da Bain & Company la settimana prossima. Non ho mai fatto un caso di consulenza. Da dove inizio?
-                      </p>
-                    </div>
-                  </motion.div>
-
-                  {/* Alex Response */}
-                  <motion.div 
-                    className="flex justify-start"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 1.2, ease }}
-                  >
-                    <div className="bg-white border border-slate-100 rounded-2xl rounded-bl-md px-4 py-3 max-w-[90%] shadow-sm">
-                      <p className="text-sm text-slate-700 leading-relaxed">
-                        Ottima domanda. Per un primo round da Bain ti consiglio di concentrarti su tre cose:
-                      </p>
-                      <div className="mt-3 space-y-2.5">
-                        <p className="text-sm text-slate-700 leading-relaxed">
-                          <span className="font-semibold text-slate-900">1) Struttura del caso:</span> impara i framework base (profitability, market entry, M&A). Il libro {"'"}Case in Point{"'"} è il riferimento standard.
-                        </p>
-                        <p className="text-sm text-slate-700 leading-relaxed">
-                          <span className="font-semibold text-slate-900">2) Mental math:</span> allenati a fare calcoli veloci a mente — ti chiederanno numeri durante il caso.
-                        </p>
-                        <p className="text-sm text-slate-700 leading-relaxed">
-                          <span className="font-semibold text-slate-900">3) Comunicazione:</span> pensa ad alta voce, non in silenzio. Bain vuole vedere il tuo processo logico, non solo la risposta.
-                        </p>
-                      </div>
-                      <p className="text-sm text-slate-700 leading-relaxed mt-3">
-                        Vuoi che ti prepari una lista di risorse specifiche?
-                      </p>
-                    </div>
-                  </motion.div>
-                </div>
-
-                {/* Input area hint */}
-                <div className="px-5 py-3 border-t border-slate-100 bg-white">
-                  <div className="flex items-center gap-2 text-slate-300">
-                    <div className="flex-1 bg-slate-50 rounded-xl px-4 py-2.5 text-sm">
-                      Scrivi un messaggio...
-                    </div>
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: grad }}>
-                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                      </svg>
-                    </div>
+                  {/* Screenshot with crop mask */}
+                  <div className="relative overflow-hidden" style={{ maxHeight: '520px' }}>
+                    <img 
+                      src="/alex-chat-screenshot.png" 
+                      alt="Alex AI Career Advisor conversation showing personalized interview preparation advice"
+                      className="w-full h-auto object-cover object-top"
+                      style={{ 
+                        marginBottom: '-60px',
+                      }}
+                    />
+                    {/* Subtle gradient fade at bottom */}
+                    <div 
+                      className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none"
+                      style={{ 
+                        background: 'linear-gradient(to top, rgba(255,255,255,0.95) 0%, transparent 100%)'
+                      }}
+                    />
                   </div>
                 </div>
               </div>

@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import {
   Document, Packer, Paragraph, TextRun,
   AlignmentType, Footer, PageNumber, BorderStyle,
+  TabStopType, TabStopPosition, LevelFormat,
 } from 'docx'
 import { useUser } from '../context/UserContext'
 import { supabase } from '../lib/supabase'
@@ -165,17 +166,17 @@ function parseAnalysisQuestions(raw) {
     .slice(0, 3)
 }
 
-function parseInline(text, baseSize = 22) {
+function parseInline(text, baseSize = 22, font = 'Calibri') {
   const runs = []
   const re = /(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|([^*]+))/g
   let m
   while ((m = re.exec(text)) !== null) {
-    if (m[2] !== undefined) runs.push(new TextRun({ text: m[2], bold: true, italics: true, size: baseSize, font: 'Calibri' }))
-    else if (m[3] !== undefined) runs.push(new TextRun({ text: m[3], bold: true, size: baseSize, font: 'Calibri' }))
-    else if (m[4] !== undefined) runs.push(new TextRun({ text: m[4], italics: true, size: baseSize, font: 'Calibri' }))
-    else if (m[5] !== undefined) runs.push(new TextRun({ text: m[5], size: baseSize, font: 'Calibri' }))
+    if (m[2] !== undefined) runs.push(new TextRun({ text: m[2], bold: true, italics: true, size: baseSize, font }))
+    else if (m[3] !== undefined) runs.push(new TextRun({ text: m[3], bold: true, size: baseSize, font }))
+    else if (m[4] !== undefined) runs.push(new TextRun({ text: m[4], italics: true, size: baseSize, font }))
+    else if (m[5] !== undefined) runs.push(new TextRun({ text: m[5], size: baseSize, font }))
   }
-  return runs.length ? runs : [new TextRun({ text, size: baseSize, font: 'Calibri' })]
+  return runs.length ? runs : [new TextRun({ text, size: baseSize, font })]
 }
 
 function markdownToParagraphs(text, isCV = false, userName = '') {
@@ -229,6 +230,390 @@ async function downloadDocx(text, filename, isCV = false, userName = '') {
   a.href = url; a.download = filename
   document.body.appendChild(a); a.click()
   document.body.removeChild(a); URL.revokeObjectURL(url)
+}
+
+// ─── Template helpers ─────────────────────────────────────────────────────────
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename
+  document.body.appendChild(a); a.click()
+  document.body.removeChild(a); URL.revokeObjectURL(url)
+}
+
+function parseCVStructure(text) {
+  const lines = text.split('\n')
+  let name = '', subtitle = ''
+  const sections = []
+  let currentSection = null
+  let preambleDone = false
+
+  // Detect all-caps section headers like "ESPERIENZA PROFESSIONALE", "FORMAZIONE" etc.
+  const isCapsSection = (s) =>
+    s.length >= 3 && s.length < 70 &&
+    /^[A-ZÀÈÉÌÍÒÓÙÚ][A-ZÀÈÉÌÍÒÓÙÚ\s&\/,'()\-]{2,}$/.test(s) &&
+    !/^[-*•]/.test(s)
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim()
+    // Markdown headings
+    if (/^## /.test(trimmed)) {
+      preambleDone = true
+      if (currentSection) sections.push(currentSection)
+      currentSection = { title: trimmed.replace(/^## /, ''), lines: [] }
+      continue
+    }
+    if (/^# /.test(trimmed)) { preambleDone = true; continue }
+    if (!preambleDone) {
+      const clean = trimmed.replace(/\*\*/g, '').replace(/^[-*•] /, '')
+      if (!clean) continue
+      if (!name) { name = clean; continue }
+      if (!subtitle) { subtitle = clean; continue }
+      // Name + subtitle captured — treat everything else as body
+      preambleDone = true
+      // Fall through to section/body detection below
+    }
+    if (!trimmed) {
+      if (currentSection) currentSection.lines.push(rawLine)
+      continue
+    }
+    // All-caps section header (after preamble)
+    if (isCapsSection(trimmed)) {
+      if (currentSection) sections.push(currentSection)
+      currentSection = { title: trimmed, lines: [] }
+      continue
+    }
+    if (currentSection) {
+      currentSection.lines.push(rawLine)
+    }
+  }
+  if (currentSection) sections.push(currentSection)
+  return { name, subtitle, sections }
+}
+
+async function generateClassicDocx(text, type, userName) {
+  const isCV = type === 'cv'
+  const BULLET_REF = 'classic-bullets'
+  const TAB_RIGHT = TabStopPosition.MAX
+  const TNR = 'Times New Roman'
+
+  const DATE_RE = /(?:\d{1,2}\/\d{4}|(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|Gen(?:naio)?|Feb(?:braio)?|Mar(?:zo)?|Apr(?:ile)?|Mag(?:gio)?|Giu(?:gno)?|Lug(?:lio)?|Ago(?:sto)?|Set(?:tembre)?|Ott(?:obre)?|Nov(?:embre)?|Dic(?:embre)?)\.?\s+\d{4}|\d{4})\s*[–\-]\s*(?:\d{1,2}\/\d{4}|\d{4}|[Pp]resent(?:e)?|[Oo]ngoing|[Aa]ttuale|[Cc]orrente|[Oo]ggi)/i
+
+  const isSectionHeader = (s) =>
+    s.length >= 3 && s.length < 70 &&
+    /^[A-ZÀÈÉÌÍÒÓÙÚ][A-ZÀÈÉÌÍÒÓÙÚ\s&\/,'()\-]{2,}$/.test(s) &&
+    !/^[-*•]/.test(s)
+
+  // Strip markdown bold/italic markers
+  const stripMd = (s) => s.replace(/\*\*/g, '').replace(/^\*([^*]+)\*$/, '$1').trim()
+
+  // ── Parse document into header + sections ──
+  const rawLines = text.split('\n')
+  let name = '', contacts = ''
+  const sections = []
+  let currentSection = null
+  let headerDone = false
+
+  for (const rawLine of rawLines) {
+    const trimmed = rawLine.trim()
+    if (/^## /.test(trimmed)) {
+      headerDone = true
+      if (currentSection) sections.push(currentSection)
+      currentSection = { title: trimmed.replace(/^## /, ''), lines: [] }
+      continue
+    }
+    if (/^# /.test(trimmed)) { headerDone = true; continue }
+    if (!headerDone) {
+      const clean = stripMd(trimmed).replace(/^[-*•] /, '')
+      if (!clean) continue
+      if (!name) { name = clean; continue }
+      if (!contacts) { contacts = clean; headerDone = true; continue }
+    }
+    if (!trimmed) { if (currentSection) currentSection.lines.push(rawLine); continue }
+    if (isSectionHeader(trimmed)) {
+      if (currentSection) sections.push(currentSection)
+      currentSection = { title: trimmed, lines: [] }
+      continue
+    }
+    if (currentSection) currentSection.lines.push(rawLine)
+  }
+  if (currentSection) sections.push(currentSection)
+
+  const displayName = (userName || name || '').replace(/\*\*/g, '')
+  const paragraphs = []
+
+  // ── Header ──
+  if (displayName) {
+    paragraphs.push(new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 80 },
+      children: [new TextRun({ text: displayName, font: TNR, size: 44, bold: true })],
+    }))
+  }
+  if (contacts) {
+    const parts = contacts.replace(/\*\*/g, '').split(/\s*[|│]\s*/).map(p => p.trim()).filter(Boolean)
+    paragraphs.push(new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 240 },
+      children: [new TextRun({ text: parts.join('  |  '), font: TNR, size: 18, color: '555555' })],
+    }))
+  }
+
+  // ── Helper: emit a two-row entry header ──
+  const emitEntryHeader = (company, location, role, dateStr) => {
+    paragraphs.push(new Paragraph({
+      spacing: { after: 0 },
+      tabStops: [{ type: TabStopType.RIGHT, position: TAB_RIGHT }],
+      children: [
+        new TextRun({ text: company, font: TNR, size: 20, bold: true }),
+        new TextRun({ text: '\t', font: TNR, size: 20 }),
+        new TextRun({ text: location, font: TNR, size: 20, bold: true }),
+      ],
+    }))
+    paragraphs.push(new Paragraph({
+      spacing: { after: 80 },
+      tabStops: [{ type: TabStopType.RIGHT, position: TAB_RIGHT }],
+      children: [
+        new TextRun({ text: role, font: TNR, size: 19, italics: true }),
+        new TextRun({ text: '\t', font: TNR, size: 19 }),
+        new TextRun({ text: dateStr, font: TNR, size: 19, color: '444444' }),
+      ],
+    }))
+  }
+
+  if (sections.length > 0) {
+    for (const section of sections) {
+      // Section title (bold, no border on it)
+      paragraphs.push(new Paragraph({
+        spacing: { before: 320, after: 40 },
+        children: [new TextRun({ text: section.title.toUpperCase(), font: TNR, size: 20, bold: true })],
+      }))
+      // Full-width ruled line under the title
+      paragraphs.push(new Paragraph({
+        spacing: { before: 0, after: 120 },
+        border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: '000000' } },
+        children: [new TextRun({ text: '' })],
+      }))
+
+      const sLines = section.lines
+      let i = 0
+      while (i < sLines.length) {
+        const rawLine = sLines[i]
+        const trimmed = rawLine.trim()
+
+        if (!trimmed) {
+          paragraphs.push(new Paragraph({ spacing: { after: 40 }, children: [new TextRun({ text: '' })] }))
+          i++; continue
+        }
+
+        // Bullet
+        if (/^[-*•] /.test(trimmed)) {
+          paragraphs.push(new Paragraph({
+            numbering: { reference: BULLET_REF, level: 0 },
+            spacing: { after: 60 },
+            children: [new TextRun({ text: stripMd(trimmed.replace(/^[-*•] /, '')), font: TNR, size: 19 })],
+          }))
+          i++; continue
+        }
+
+        // ── Entry detection ──
+        // The AI can produce entries in several formats. We try each pattern:
+
+        // Pattern A: **Company** | Location | Date  (all on one line)
+        //   next line may be *Role* or Role
+        const boldInlineMatch = trimmed.match(/^\*\*([^*]+)\*\*\s*[|│,]\s*(.+)$/)
+        if (boldInlineMatch) {
+          const company = boldInlineMatch[1].trim()
+          const rest = boldInlineMatch[2].trim()   // "Location | Date" or "Date"
+          const dateInRest = rest.match(DATE_RE)
+          if (dateInRest) {
+            const dateStr = dateInRest[0]
+            const beforeDate = rest.slice(0, rest.lastIndexOf(dateStr)).replace(/[\s|│,—–\-]+$/, '').trim()
+            const location = beforeDate
+            // Look ahead for role
+            let role = '', skip = 1
+            if (i + 1 < sLines.length) {
+              const nxt = sLines[i + 1].trim()
+              if (nxt && !/^[-*•]/.test(nxt) && !nxt.match(DATE_RE) && !isSectionHeader(nxt)) {
+                role = stripMd(nxt).replace(/^\*(.+)\*$/, '$1')
+                skip = 2
+              }
+            }
+            emitEntryHeader(company, location, role, dateStr)
+            i += skip; continue
+          }
+        }
+
+        // Pattern B: **Company** alone on one line
+        //   next line: *Role* | Location | Date  OR  Role | Location | Date  OR  Location | Date (role on line after)
+        const boldOnlyMatch = trimmed.match(/^\*\*([^*]+)\*\*$/)
+        if (boldOnlyMatch && i + 1 < sLines.length) {
+          const company = boldOnlyMatch[1].trim()
+          const nxt1 = sLines[i + 1].trim()
+          const dateInNext = nxt1.match(DATE_RE)
+          if (dateInNext) {
+            const dateStr = dateInNext[0]
+            const dateIdx = nxt1.lastIndexOf(dateStr)
+            const leftPart = nxt1.slice(0, dateIdx).replace(/[\s|│,—–\-]+$/, '').trim()
+            // leftPart could be "Location" or "*Role* | Location" or "Role | Location"
+            const pipeIdx = leftPart.lastIndexOf('|')
+            let location = '', role = ''
+            if (pipeIdx !== -1) {
+              role = stripMd(leftPart.slice(0, pipeIdx).trim())
+              location = leftPart.slice(pipeIdx + 1).trim()
+            } else {
+              location = stripMd(leftPart)
+              // Check line i+2 for role
+              if (i + 2 < sLines.length) {
+                const nxt2 = sLines[i + 2].trim()
+                if (nxt2 && !/^[-*•]/.test(nxt2) && !nxt2.match(DATE_RE) && !isSectionHeader(nxt2)) {
+                  // nxt2 is probably role — but we already placed location from nxt1
+                  // In this sub-case swap: nxt1 = role|location, no — keep location as is
+                }
+              }
+            }
+            emitEntryHeader(company, location, role, dateStr)
+            i += 2; continue
+          }
+          // nxt1 has no date — maybe it's role and nxt2 has date+location
+          if (i + 2 < sLines.length) {
+            const potentialRole = stripMd(nxt1)
+            const nxt2 = sLines[i + 2].trim()
+            const dateInNxt2 = nxt2.match(DATE_RE)
+            if (dateInNxt2 && !/^[-*•]/.test(nxt1) && !isSectionHeader(nxt1)) {
+              const dateStr = dateInNxt2[0]
+              const dateIdx = nxt2.lastIndexOf(dateStr)
+              const leftPart = nxt2.slice(0, dateIdx).replace(/[\s|│,—–\-]+$/, '').trim()
+              const location = stripMd(leftPart)
+              emitEntryHeader(company, location, potentialRole, dateStr)
+              i += 3; continue
+            }
+          }
+        }
+
+        // Pattern C: plain line with pipe and date (no bold markers)
+        //   e.g.  "Company | Location | Date"  or  "Company | Location | Role | Date"
+        const dateInLine = trimmed.match(DATE_RE)
+        if (dateInLine) {
+          const dateStr = dateInLine[0]
+          const dateIdx = trimmed.lastIndexOf(dateStr)
+          const leftRaw = trimmed.slice(0, dateIdx).replace(/[\s|│,—–\-]+$/, '').trim()
+          const pipes = leftRaw.split(/\s*[|│]\s*/).map(p => stripMd(p)).filter(Boolean)
+          let company = '', location = '', role = ''
+          if (pipes.length >= 2) {
+            company = pipes[0]
+            location = pipes[pipes.length - 1]
+            if (pipes.length >= 3) role = pipes.slice(1, -1).join(', ')
+          } else if (pipes.length === 1) {
+            company = pipes[0]
+          } else {
+            company = stripMd(leftRaw)
+          }
+          // Look ahead for role if not found
+          let skip = 1
+          if (!role && i + 1 < sLines.length) {
+            const nxt = sLines[i + 1].trim()
+            if (nxt && !/^[-*•]/.test(nxt) && !nxt.match(DATE_RE) && !isSectionHeader(nxt)) {
+              role = stripMd(nxt)
+              skip = 2
+            }
+          }
+          emitEntryHeader(company, location, role, dateStr)
+          i += skip; continue
+        }
+
+        // Normal body line (description)
+        paragraphs.push(new Paragraph({
+          spacing: { after: 60 },
+          children: parseInline(rawLine, 19, TNR),
+        }))
+        i++
+      }
+
+      paragraphs.push(new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: '' })] }))
+    }
+  } else {
+    // Cover letter fallback
+    let skipped = 0
+    for (const rawLine of rawLines) {
+      const clean = stripMd(rawLine.trim())
+      if (skipped < 2 && (clean === displayName || clean === contacts || !clean)) { if (clean) skipped++; continue }
+      const trimmed = rawLine.trim()
+      if (!trimmed) { paragraphs.push(new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text: '' })] })); continue }
+      paragraphs.push(new Paragraph({ spacing: { after: 80 }, children: parseInline(rawLine, 19, TNR) }))
+    }
+  }
+
+  const margin = { top: 1800, right: 1800, bottom: 1800, left: 1800 }
+  const doc = new Document({
+    numbering: {
+      config: [{
+        reference: BULLET_REF,
+        levels: [{
+          level: 0,
+          format: LevelFormat.BULLET,
+          text: '•',
+          alignment: AlignmentType.LEFT,
+          style: {
+            paragraph: { indent: { left: 360, hanging: 180 } },
+          },
+        }],
+      }],
+    },
+    sections: [{
+      properties: { page: { size: { width: 11906, height: 16838 }, margin } },
+      children: paragraphs,
+      ...(isCV ? { footers: { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ children: [PageNumber.CURRENT], size: 18, font: TNR, color: '888888' })] })] }) } } : {}),
+    }],
+  })
+  triggerDownload(await Packer.toBlob(doc), `${isCV ? 'CV' : 'CoverLetter'}_Classic.docx`)
+}
+
+async function generateMinimalDocx(text, type, userName) {
+  const isCV = type === 'cv'
+  const struct = parseCVStructure(text)
+  const displayName = (userName || struct.name || '').replace(/\*\*/g, '')
+  const paragraphs = []
+
+  if (displayName) {
+    paragraphs.push(new Paragraph({ spacing: { before: 0, after: 60 }, children: [new TextRun({ text: displayName, bold: true, size: 40, font: 'Arial', color: '0a0a0a' })] }))
+  }
+  if (struct.subtitle) {
+    paragraphs.push(new Paragraph({ spacing: { before: 0, after: 100 }, children: [new TextRun({ text: struct.subtitle.replace(/\*\*/g, ''), size: 18, font: 'Arial', color: '888888' })] }))
+  }
+  paragraphs.push(new Paragraph({ spacing: { before: 60, after: 200 }, border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'e0e0e0' } }, children: [new TextRun({ text: '' })] }))
+
+  if (struct.sections.length > 0) {
+    for (const section of struct.sections) {
+      paragraphs.push(new Paragraph({ spacing: { before: 240, after: 80 }, children: [new TextRun({ text: section.title.toUpperCase(), bold: true, size: 15, font: 'Arial', color: '0a0a0a' })] }))
+      for (const rawLine of section.lines) {
+        const trimmed = rawLine.trim()
+        if (!trimmed) { paragraphs.push(new Paragraph({ spacing: { after: 40 }, children: [new TextRun({ text: '' })] })); continue }
+        if (/^[-*•] /.test(trimmed)) {
+          paragraphs.push(new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: '– ', size: 20, font: 'Arial', color: '444444' }), ...parseInline(trimmed.replace(/^[-*•] /, ''), 20, 'Arial')] }))
+          continue
+        }
+        if (/^### /.test(trimmed)) {
+          paragraphs.push(new Paragraph({ spacing: { before: 100, after: 40 }, children: [new TextRun({ text: trimmed.replace(/^### /, ''), bold: true, size: 20, font: 'Arial', color: '333333' })] }))
+          continue
+        }
+        paragraphs.push(new Paragraph({ spacing: { after: 60 }, children: parseInline(rawLine, 20, 'Arial') }))
+      }
+    }
+  } else {
+    let skipped = 0
+    for (const rawLine of text.split('\n')) {
+      const clean = rawLine.trim().replace(/\*\*/g, '')
+      if (skipped < 2 && (clean === displayName || clean === struct.subtitle || !clean)) { if (clean) skipped++; continue }
+      const trimmed = rawLine.trim()
+      if (!trimmed) { paragraphs.push(new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text: '' })] })); continue }
+      paragraphs.push(new Paragraph({ spacing: { after: 80 }, children: parseInline(rawLine, 20, 'Arial') }))
+    }
+  }
+
+  const margin = { top: 1418, right: 1701, bottom: 1418, left: 1701 }
+  const doc = new Document({ sections: [{ properties: { page: { margin } }, children: paragraphs }] })
+  triggerDownload(await Packer.toBlob(doc), `${isCV ? 'CV' : 'CoverLetter'}_Minimal.docx`)
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -381,6 +766,188 @@ function inlineMarkdown(text) {
     .replace(/`(.+?)`/g, '<code style="background:#F1F5F9;padding:1px 5px;border-radius:4px;font-size:12.5px;font-family:monospace">$1</code>')
 }
 
+// ─── Template previews ────────────────────────────────────────────────────────
+function PreviewMinimal() {
+  return (
+    <div style={{ height: 200, background: '#fff', padding: '14px 16px', overflow: 'hidden' }}>
+      <div style={{ fontWeight: 600, fontSize: 11, color: '#111', marginBottom: 3 }}>Federico Balucani</div>
+      <div style={{ fontSize: 7, color: '#888', marginBottom: 8 }}>milano@email.com · LinkedIn · +39 333 000 0000</div>
+      <div style={{ fontSize: 7, fontWeight: 600, color: '#111', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '0.5px solid #ddd', paddingBottom: 2, marginBottom: 5 }}>Experience</div>
+      <div style={{ fontSize: 8, fontWeight: 600, color: '#111' }}>Marketing Specialist</div>
+      <div style={{ fontSize: 7.5, color: '#555', marginBottom: 4 }}>Mondadori · Milano · 2023–oggi</div>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 2 }}>
+        <span style={{ color: '#999', fontSize: 7 }}>•</span>
+        <div style={{ height: 4, background: '#e0e0e0', borderRadius: 1, flex: 1, marginTop: 3 }} />
+      </div>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 2 }}>
+        <span style={{ color: '#999', fontSize: 7 }}>•</span>
+        <div style={{ height: 4, background: '#e8e8e8', borderRadius: 1, width: '70%', marginTop: 3 }} />
+      </div>
+      <div style={{ fontSize: 7, fontWeight: 600, color: '#111', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '0.5px solid #ddd', paddingBottom: 2, marginTop: 8, marginBottom: 5 }}>Education</div>
+      <div style={{ fontSize: 8, fontWeight: 600, color: '#111' }}>IULM University</div>
+      <div style={{ fontSize: 7.5, color: '#555' }}>Bachelor · Marketing · 2024</div>
+    </div>
+  )
+}
+
+function PreviewClassic() {
+  return (
+    <div style={{ height: 200, background: '#fff', padding: '14px 16px', overflow: 'hidden' }}>
+      <div style={{ textAlign: 'center', fontFamily: 'Georgia,serif', fontWeight: 700, fontSize: 12, color: '#111', textTransform: 'uppercase', letterSpacing: '0.3px', marginBottom: 3 }}>Federico Balucani</div>
+      <div style={{ textAlign: 'center', fontSize: 7, color: '#666', marginBottom: 8 }}>milano@email.com | LinkedIn | +39 333 000 0000</div>
+      <div style={{ fontSize: 7, fontWeight: 700, color: '#111', textTransform: 'uppercase', borderBottom: '1px solid #111', paddingBottom: 2, marginBottom: 5, letterSpacing: '0.3px' }}>Professional Experience</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 1 }}>
+        <span style={{ fontSize: 8, fontWeight: 700, color: '#111' }}>Mondadori S.p.A.</span>
+        <span style={{ fontSize: 8, fontWeight: 700, color: '#111' }}>Milano, IT</span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+        <span style={{ fontSize: 7.5, fontStyle: 'italic', color: '#333' }}>Marketing Specialist</span>
+        <span style={{ fontSize: 7.5, color: '#555' }}>2023–oggi</span>
+      </div>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 2 }}>
+        <span style={{ color: '#999', fontSize: 7 }}>•</span>
+        <div style={{ height: 3.5, background: '#ddd', borderRadius: 1, flex: 1, marginTop: 3 }} />
+      </div>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+        <span style={{ color: '#999', fontSize: 7 }}>•</span>
+        <div style={{ height: 3.5, background: '#e5e5e5', borderRadius: 1, width: '65%', marginTop: 3 }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 1 }}>
+        <span style={{ fontSize: 8, fontWeight: 700, color: '#111' }}>HEC Paris</span>
+        <span style={{ fontSize: 8, fontWeight: 700, color: '#111' }}>Paris, FR</span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 7.5, fontStyle: 'italic', color: '#333' }}>Master in Marketing</span>
+        <span style={{ fontSize: 7.5, color: '#555' }}>2026</span>
+      </div>
+    </div>
+  )
+}
+
+function TemplateModal({ type, downloading, onSelect, onClose }) {
+  const templates = [
+    { id: 'minimal', name: 'Minimal', desc: 'Clean and structured.', Preview: PreviewMinimal },
+    { id: 'classic', name: 'Classic', desc: 'Corporate style.', Preview: PreviewClassic },
+  ]
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+      role="dialog"
+      aria-modal="true"
+      style={{ perspective: '1200px' }}
+    >
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/40 backdrop-blur-md"
+        style={{ animation: 'tmFadeIn 220ms ease both' }}
+        onClick={!downloading ? onClose : undefined}
+      />
+
+      {/* Sheet */}
+      <div
+        className="relative bg-white w-full sm:max-w-2xl sm:rounded-3xl rounded-t-3xl z-10 overflow-hidden"
+        style={{
+          boxShadow: '0 32px 80px rgba(0,0,0,0.22), 0 8px 24px rgba(0,0,0,0.12)',
+          animation: 'tmSlideUp 300ms cubic-bezier(0.34,1.56,0.64,1) both',
+        }}
+      >
+        {/* Drag handle (mobile) */}
+        <div className="flex justify-center pt-3 pb-1 sm:hidden">
+          <div className="w-9 h-1 rounded-full bg-slate-300" />
+        </div>
+
+        {/* Header */}
+        <div className="px-8 pt-7 pb-5 border-b border-slate-100/80">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight text-slate-900">Choose a template</h2>
+              <p className="text-sm text-slate-400 mt-0.5">Downloads immediately after you select.</p>
+            </div>
+            <button
+              onClick={onClose}
+              disabled={!!downloading}
+              className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors disabled:opacity-40"
+              aria-label="Close"
+            >
+              <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Cards */}
+        <div className="px-8 py-7 grid grid-cols-2 gap-5">
+          {templates.map(({ id, name, desc, Preview }, idx) => (
+            <button
+              key={id}
+              onClick={() => onSelect(id)}
+              disabled={!!downloading}
+              className="group flex flex-col text-left disabled:opacity-50 focus:outline-none"
+              style={{ animation: `tmCardIn 280ms cubic-bezier(0.34,1.4,0.64,1) ${idx * 60}ms both` }}
+            >
+              {/* Preview frame */}
+              <div
+                className="w-full overflow-hidden rounded-2xl border border-slate-200 group-hover:border-apex-blue/60 group-focus-visible:border-apex-blue transition-all duration-200"
+                style={{
+                  height: 200,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                  transform: 'translateY(0)',
+                  transition: 'transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(37,99,235,0.12)' }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.06)' }}
+              >
+                <Preview />
+              </div>
+
+              {/* Label */}
+              <div className="mt-3 px-1 flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-slate-800 group-hover:text-apex-blue transition-colors">{name}</span>
+                    {downloading === id && (
+                      <span className="inline-block w-3.5 h-3.5 rounded-full border-2 border-slate-300 border-t-apex-blue animate-spin" />
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">{desc}</p>
+                </div>
+                <div className="w-5 h-5 rounded-full border-2 border-slate-200 group-hover:border-apex-blue flex items-center justify-center transition-colors flex-shrink-0">
+                  <div className="w-2 h-2 rounded-full bg-apex-blue opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="px-8 pb-8 flex justify-center">
+          <button
+            onClick={onClose}
+            disabled={!!downloading}
+            className="text-sm text-slate-400 hover:text-slate-600 disabled:opacity-40 transition-colors py-1 px-3 rounded-lg hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes tmFadeIn { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes tmSlideUp {
+          from { opacity: 0; transform: translateY(24px) scale(0.97) }
+          to   { opacity: 1; transform: translateY(0)   scale(1) }
+        }
+        @keyframes tmCardIn {
+          from { opacity: 0; transform: translateY(10px) }
+          to   { opacity: 1; transform: translateY(0) }
+        }
+      `}</style>
+    </div>
+  )
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function TailoringLab() {
   const { user, session, addApplication, applications, drafts, saveDraft, deleteDraft } = useUser()
@@ -430,6 +997,7 @@ export default function TailoringLab() {
   const [error, setError]               = useState(null)
   const [addedToTracker, setAddedToTracker] = useState(false)
   const [downloading, setDownloading]   = useState(null)
+  const [templateModal, setTemplateModal] = useState(null) // null | { type: 'cv' | 'cover' }
   const [copied, setCopied]             = useState(false)
   const [sessionId, setSessionId]       = useState(null)
   const [activeDraftId, setActiveDraftId] = useState(null)
@@ -680,18 +1248,38 @@ export default function TailoringLab() {
     await generate(answers)
   }
 
-  const handleDownload = async (type) => {
-    setDownloading(type)
-    try {
-      const text  = type === 'cv' ? tailoredCV : coverLetter
-      const label = type === 'cv' ? 'CV' : 'Cover_Letter'
+  const handleDownload = (type) => {
+    if (type === 'cover') {
+      // Direct download, no modal
       const company = activeJob?.company?.replace(/\s+/g, '_') || 'Company'
-      await downloadDocx(text, `${label}_${company}.docx`, type === 'cv', user.name)
-      if (type === 'cv') posthog.capture('cv_downloaded', { job_title: activeJob?.title, company: activeJob?.company })
+      const userName = user?.name || ''
+      downloadDocx(coverLetter, `Cover_Letter_${company}.docx`, false, userName)
+        .then(() => posthog.capture('cover_letter_downloaded', { job_title: activeJob?.title, company: activeJob?.company }))
+        .catch(err => console.error('[TailoringLab] Cover letter download error:', err))
+    } else {
+      setTemplateModal({ type })
+    }
+  }
+
+  const handleTemplateSelect = async (template) => {
+    if (!templateModal) return
+    const { type } = templateModal
+    const text = type === 'cv' ? tailoredCV : coverLetter
+    const userName = user?.name || ''
+    setDownloading(template)
+    try {
+      if (template === 'classic') await generateClassicDocx(text, type, userName)
+      else if (template === 'minimal') await generateMinimalDocx(text, type, userName)
+      posthog.capture('cv_downloaded', { job_title: activeJob?.title, company: activeJob?.company, template })
     } catch (err) {
-      console.error('[TailoringLab] Download error:', err)
+      console.error('[TailoringLab] Template download error:', err)
+      try {
+        const company = activeJob?.company?.replace(/\s+/g, '_') || 'Company'
+        await downloadDocx(text, `CV_${company}.docx`, true, userName)
+      } catch {}
     } finally {
       setDownloading(null)
+      setTemplateModal(null)
     }
   }
 
@@ -807,6 +1395,16 @@ export default function TailoringLab() {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="p-4 md:p-8 page-fade-in flex flex-col md:h-dvh md:overflow-hidden">
+      {/* Template selector modal */}
+      {templateModal && (
+        <TemplateModal
+          type={templateModal.type}
+          downloading={downloading}
+          onSelect={handleTemplateSelect}
+          onClose={() => { if (!downloading) setTemplateModal(null) }}
+        />
+      )}
+
       {/* Header */}
       <div className="mb-5 flex-shrink-0">
         <h1 className="text-2xl font-bold text-slate-900">Tailoring Lab</h1>

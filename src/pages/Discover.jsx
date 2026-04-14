@@ -760,6 +760,183 @@ function BrowseSkeletonCard() {
   )
 }
 
+// ─── Import tip card ─────────────────────────────────────────────────────────
+// Tag definitions — icons are the exact same paths used in the sidebar nav
+const TIP_TAGS = {
+  apex: {
+    style: 'display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#2563EB,#38BDF8);border-radius:6px;padding:5px 11px 5px 8px;font-size:11.5px;font-weight:600;color:#fff;white-space:nowrap;letter-spacing:0.01em;',
+    icon:  `<img src="/apex_x_blue.png" style="width:13px;height:13px;object-fit:contain;filter:brightness(0) invert(1);flex-shrink:0;" />`,
+    label: 'APEX',
+  },
+  inbox: {
+    // My Jobs / My Inbox — exact sidebar icon path
+    style: 'display:inline-flex;align-items:center;gap:6px;background:#eff6ff;border:1px solid #dbeafe;border-radius:6px;padding:5px 11px 5px 8px;font-size:11.5px;font-weight:600;color:#2563eb;white-space:nowrap;letter-spacing:0.01em;',
+    icon:  `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>`,
+    label: 'My Inbox',
+  },
+  tailoring: {
+    style: 'display:inline-flex;align-items:center;gap:6px;background:#eff6ff;border:1px solid #dbeafe;border-radius:6px;padding:5px 11px 5px 8px;font-size:11.5px;font-weight:600;color:#2563eb;white-space:nowrap;letter-spacing:0.01em;',
+    icon:  `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>`,
+    label: 'Tailoring Lab',
+  },
+  tracker: {
+    style: 'display:inline-flex;align-items:center;gap:6px;background:#eff6ff;border:1px solid #dbeafe;border-radius:6px;padding:5px 11px 5px 8px;font-size:11.5px;font-weight:600;color:#2563eb;white-space:nowrap;letter-spacing:0.01em;',
+    icon:  `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>`,
+    label: 'Tracker',
+  },
+  alex: {
+    style: 'display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#2563EB,#38BDF8);border-radius:6px;padding:5px 11px 5px 8px;font-size:11.5px;font-weight:600;color:#fff;white-space:nowrap;letter-spacing:0.01em;',
+    icon:  `<span style="width:16px;height:16px;border-radius:3px;background:rgba(255,255,255,0.22);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;"><img src="/apex_x_blue.png" style="width:11px;height:11px;object-fit:contain;filter:brightness(0) invert(1);" /></span>`,
+    label: 'Alex',
+  },
+}
+
+const TIP_BODIES = [
+  { tag: 'inbox',     html: '<strong style="font-weight:600">APEX reads the full description</strong> — not just the title. Your match score reflects the actual role requirements.' },
+  { tag: 'tailoring', html: 'Once imported, open <strong style="font-weight:600">Tailoring Lab</strong> to rewrite your CV for this exact role. Two minutes. Interviewer-ready output.' },
+  { tag: 'alex',      html: 'Ask <strong style="font-weight:600">Alex</strong> to explain any gap in your profile, and how to close it before you apply.' },
+  { tag: 'alex',      html: '<strong style="font-weight:600">Alex remembers your full history.</strong> The more context you give, the sharper the advice.' },
+  { tag: 'tracker',   html: 'Track every application in one place. <strong style="font-weight:600">Patterns across rejections</strong> reveal more than any single feedback.' },
+]
+
+const TIP_INTERVAL_MS = 4500
+
+function ImportTipCard({ isImporting }) {
+  const containerRef = useRef(null)
+  const intervalRef  = useRef(null)
+
+  useEffect(() => {
+    if (!isImporting) return
+    const container = containerRef.current
+    if (!container) return
+
+    // Shuffle a copy so each import session shows tips in a different order
+    const tips = [...TIP_BODIES]
+    for (let i = tips.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [tips[i], tips[j]] = [tips[j], tips[i]]
+    }
+
+    function buildCard(idx, entering) {
+      const { tag, html } = tips[idx]
+      const { style: tagStyle, icon: tagIcon, label: tagLabel } = TIP_TAGS[tag]
+
+      const card = document.createElement('div')
+      card.style.cssText = [
+        'position:absolute;inset:0;',
+        'display:flex;flex-direction:column;justify-content:space-between;',
+        'padding:28px 32px 24px;',
+      ].join('')
+      card.className = entering ? 'tip-card-state-enter' : 'tip-card-state-active'
+
+      card.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <div style="${tagStyle}">${tagIcon}<span>${tagLabel}</span></div>
+          <div style="font-size:17px;color:#111827;line-height:1.65;font-weight:400;letter-spacing:-0.01em;">${html}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;">
+          ${Array.from({ length: 5 }, (_, i) => `
+            <div style="width:5px;height:5px;border-radius:50%;transition:all 0.3s ease;${
+              i === idx
+                ? 'background:#2563eb;transform:scale(1.35);'
+                : 'background:#e2e8f0;'
+            }"></div>
+          `).join('')}
+        </div>
+      `
+      container.appendChild(card)
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          card.classList.remove('tip-card-state-enter')
+          card.classList.add('tip-card-state-active')
+        })
+      })
+    }
+
+    function transitionTo(nextIdx) {
+      const current = container.querySelector('.tip-card-state-active')
+      if (current) {
+        current.classList.remove('tip-card-state-active')
+        current.classList.add('tip-card-state-exit')
+        setTimeout(() => current.remove(), 540)
+      }
+      buildCard(nextIdx, true)
+    }
+
+    buildCard(0, false)
+
+    let tipNum = 1
+    intervalRef.current = setInterval(() => {
+      if (tipNum >= 5) { clearInterval(intervalRef.current); return }
+      transitionTo(tipNum)
+      tipNum++
+    }, TIP_INTERVAL_MS)
+
+    return () => {
+      clearInterval(intervalRef.current)
+      while (container.firstChild) container.removeChild(container.firstChild)
+    }
+  }, [isImporting]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!isImporting) return null
+
+  return (
+    <>
+      {/* Frosted backdrop — softly pauses the world, signals "app is working" */}
+      <div
+        className="tip-backdrop-in"
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(248,250,252,0.82)',
+          backdropFilter: 'blur(6px)',
+          WebkitBackdropFilter: 'blur(6px)',
+          zIndex: 199,
+          pointerEvents: 'none',
+        }}
+      />
+
+      {/* Card — wide, generous, typographically-led */}
+      <div
+        className="tip-card-in"
+        style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          // animation sets the transform, so we only need the translate here
+          // (tip-card-in keyframe handles translate + scale)
+          zIndex: 200,
+          width: 440,
+          background: '#ffffff',
+          borderRadius: 20,
+          border: '1px solid rgba(0,0,0,0.07)',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.04), 0 16px 48px rgba(0,0,0,0.11)',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Progress sweep at the very top edge of the card */}
+        <div style={{ height: 3, background: '#eff6ff', overflow: 'hidden' }}>
+          <div
+            className="import-sweep"
+            style={{
+              height: '100%',
+              width: '45%',
+              background: 'linear-gradient(90deg, transparent, #2563eb, #60a5fa, transparent)',
+            }}
+          />
+        </div>
+
+        {/* Tips scroll area */}
+        <div
+          ref={containerRef}
+          style={{ position: 'relative', height: 210, overflow: 'hidden' }}
+        />
+      </div>
+    </>
+  )
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function Discover() {
   const { user, session, applications, addApplication, addManualJob } = useUser()
@@ -780,6 +957,7 @@ export default function Discover() {
   const [importBarError, setImportBarError]       = useState('')
   const [importBarFocused, setImportBarFocused]   = useState(false)
   const [newJobId, setNewJobId]                   = useState(null)
+  const [importStartTime, setImportStartTime]     = useState(null)
 
   // ── Expanded card state ──────────────────────────────────────────────────────
   const [expandedInboxId, setExpandedInboxId] = useState(null)
@@ -979,6 +1157,7 @@ export default function Discover() {
   const handleInlineImport = async () => {
     if (!importBarUrl.trim() || !session?.user?.id) return
     setImportBarLoading(true)
+    setImportStartTime(Date.now())
     setImportBarError('')
     try {
       const res = await fetch('/api/import-job', {
@@ -1020,6 +1199,7 @@ export default function Discover() {
       setImportBarError('Could not read this page. Try adding manually.')
     } finally {
       setImportBarLoading(false)
+      setImportStartTime(null)
     }
   }
 
@@ -1170,7 +1350,7 @@ export default function Discover() {
         </div>
 
         {/* ── Import bar ── */}
-        <div className="flex-shrink-0 mb-5">
+        <div className="flex-shrink-0 mb-5" style={{ position: 'relative' }}>
           <div style={{
             display: 'flex',
             background: '#fff',
@@ -1243,6 +1423,8 @@ export default function Discover() {
               <div className="import-sweep" style={{ height: '100%', width: '40%', background: 'linear-gradient(90deg, transparent, #2563EB, transparent)' }} />
             </div>
           )}
+
+          <ImportTipCard isImporting={importBarLoading} />
 
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-2 px-1">
             <span className="text-[11px] text-slate-400">Works with</span>

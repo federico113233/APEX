@@ -146,15 +146,21 @@ function ManualBadge() {
 }
 
 // ── Match score badge ─────────────────────────────────────────────────────────
-function MatchScoreBadge({ score }) {
+function MatchScoreBadge({ score, format = 'percent' }) {
   if (!score && score !== 0) return null
-  const n = Number(score)
+  const raw = Number(score)
+  // Normalize: old Adzuna scores are 0-100, new ones are 0-5 — convert both to 0-100
+  const n = raw > 5 ? raw : Math.round(raw * 20)
   let cls = 'bg-slate-100 text-slate-500'
   if (n >= 80) cls = 'bg-green-50 text-green-700 ring-1 ring-green-200'
   else if (n >= 60) cls = 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
+  // score format: normalize to 0-5 for display
+  const display = format === 'score'
+    ? (raw > 5 ? Math.round((raw / 100) * 5 * 10) / 10 : raw).toFixed(1) + ' / 5'
+    : n + '% match'
   return (
     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${cls}`}>
-      {n}% match
+      {display}
     </span>
   )
 }
@@ -747,7 +753,7 @@ function DetailPanel({ app, onClose, onStatusChange, onNotesChange, onDelete }) 
           {/* Status + match */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
             <StatusDropdown value={app.status} onChange={(s) => onStatusChange(app.id, s)} />
-            {app.manual ? <ManualBadge /> : app.matchScore > 0 && <MatchScoreBadge score={app.matchScore} />}
+            {app.matchScore > 0 ? <MatchScoreBadge score={app.matchScore} format="score" /> : app.manual ? <ManualBadge /> : null}
             {app.status === 'Interview' && (
               <button
                 onClick={() => setShowCalModal(true)}
@@ -1202,7 +1208,7 @@ function Tracker() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search your applications..."
+            placeholder="Search by role or company..."
             className="w-full rounded-xl border border-slate-200 pl-10 pr-4 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
           />
         </div>
@@ -1282,7 +1288,7 @@ function Tracker() {
                     </div>
                     <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                       <StatusBadge status={app.status} />
-                      {app.manual ? <ManualBadge /> : app.matchScore > 0 && <MatchScoreBadge score={app.matchScore} />}
+                      {app.matchScore > 0 ? <MatchScoreBadge score={app.matchScore} format="score" /> : app.manual ? <ManualBadge /> : null}
                     </div>
                   </div>
                 </div>
@@ -1318,7 +1324,7 @@ function Tracker() {
                     <StatusBadge status={app.status} />
                   </td>
                   <td className="py-4 px-6">
-                    {app.manual ? <ManualBadge /> : app.matchScore > 0 && <MatchScoreBadge score={app.matchScore} />}
+                    {app.matchScore > 0 ? <MatchScoreBadge score={app.matchScore} format="score" /> : app.manual ? <ManualBadge /> : null}
                   </td>
                   <td className="py-4 px-6 text-sm text-slate-400">{app.appliedDate}</td>
                   <td className="py-4 px-6 text-slate-300">

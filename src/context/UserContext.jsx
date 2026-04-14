@@ -302,11 +302,11 @@ export function UserProvider({ children }) {
     if (error) console.error('[Supabase] updateApplicationNotes error:', error)
   }
 
-  const addManualJob = async ({ title, company, location, description, jobUrl }) => {
+  const addManualJob = async ({ title, company, location, description, jobUrl, matchScore }) => {
     const userId = session?.user?.id
     const jobId = `manual_${crypto.randomUUID()}`
     if (userId) {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('applications')
         .insert({
           user_id:     userId,
@@ -317,15 +317,17 @@ export function UserProvider({ children }) {
           description: description || '',
           job_url:     jobUrl || '',
           status:      'Applied',
-          match_score: null,
+          match_score: matchScore ?? null,
           manual:      true,
           notes:       '',
         })
+        .select()
+        .single()
       if (error) {
-        console.error('[Supabase] addManualJob error:', error)
+        console.error('[Supabase] addManualJob error:', error.message, '| code:', error.code, '| details:', error.details, '| hint:', error.hint)
         return { error, jobId: null }
       }
-      await loadApplications(userId)
+      setApplications((prev) => [rowToApp(data), ...prev])
       return { error: null, jobId }
     } else {
       const appliedDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -333,7 +335,7 @@ export function UserProvider({ children }) {
         id: jobId, jobId, title, company, location: location || '',
         description: description || '', jobUrl: jobUrl || '',
         status: 'Applied', tailoredCv: '', coverLetter: '',
-        notes: '', matchScore: 0, appliedDate, manual: true,
+        notes: '', matchScore: matchScore ?? null, appliedDate, manual: true,
       }, ...prev])
       return { error: null, jobId }
     }

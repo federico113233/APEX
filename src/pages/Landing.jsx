@@ -429,7 +429,7 @@ function SocialProof() {
       <Stagger className="flex flex-col items-center gap-5" delay={0}>
         <Item>
           <p className="text-xs font-semibold tracking-widest text-slate-400 uppercase text-center">
-            Used by students at Italy's top universities
+            Used by students at top universities
           </p>
         </Item>
         <Item>
@@ -887,7 +887,7 @@ function Pricing() {
         <FadeIn direction="up">
           <p className="text-xs font-bold tracking-widest text-blue-500 uppercase mb-4">PRICING</p>
           <h2 className="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight">Simple, transparent pricing.</h2>
-          <p className="text-slate-400 text-lg mt-2">Coming soon.</p>
+          <p className="text-slate-400 text-lg mt-2">Free while in beta. Always fair.</p>
 
           <motion.div
             className="mt-12 max-w-sm mx-auto bg-white border border-slate-200 rounded-2xl p-8 text-center shadow-lg"

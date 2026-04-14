@@ -80,7 +80,7 @@ function QuickActionCard({ to, label, desc, icon }) {
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#0F172A' }}>{label}</p>
-        <p style={{ margin: '1px 0 0', fontSize: 11.5, color: '#94A3B8' }}>{desc}</p>
+        <p style={{ margin: '1px 0 0', fontSize: 12, color: '#94A3B8' }}>{desc}</p>
       </div>
       <svg width="13" height="13" fill="none" stroke={hov ? '#2563EB' : '#CBD5E1'} viewBox="0 0 24 24" style={{ flexShrink: 0, transition: 'stroke 0.18s' }}>
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
@@ -195,7 +195,7 @@ export default function Dashboard() {
             <p style={{
               margin: '10px 0 0',
               fontSize: 13,
-              color: 'rgba(255,255,255,0.38)',
+              color: 'rgba(255,255,255,0.58)',
               letterSpacing: '0.01em',
             }}>
               {statsLine}
@@ -218,7 +218,10 @@ export default function Dashboard() {
 
               {/* Alex Card */}
               <div
+                role="button"
+                tabIndex={0}
                 onClick={() => navigate('/dashboard/alex')}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('/dashboard/alex') } }}
                 onMouseEnter={() => setAlexHov(true)}
                 onMouseLeave={() => setAlexHov(false)}
                 style={{
@@ -256,7 +259,7 @@ export default function Dashboard() {
                 {/* Label */}
                 <p style={{
                   margin: '0 0 14px',
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: 700,
                   color: 'rgba(255,255,255,0.65)',
                   textTransform: 'uppercase',
@@ -312,7 +315,7 @@ export default function Dashboard() {
               <div style={fadeStyle(160)}>
                 <p style={{
                   margin: '0 0 10px',
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: 700,
                   color: '#94A3B8',
                   textTransform: 'uppercase',
@@ -359,12 +362,12 @@ export default function Dashboard() {
 
                 {applications.length === 0 ? (
                   <div style={{ padding: '28px 20px', textAlign: 'center' }}>
-                    <p style={{ margin: 0, fontSize: 13, color: '#CBD5E1' }}>No applications yet</p>
+                    <p style={{ margin: 0, fontSize: 13, color: '#94A3B8', lineHeight: 1.5 }}>Your tracker is empty — find your first opportunity.</p>
                     <Link
                       to="/dashboard/discover"
                       style={{ display: 'inline-block', marginTop: 10, fontSize: 12, fontWeight: 600, color: '#2563EB', textDecoration: 'none' }}
                     >
-                      My Jobs
+                      Browse My Jobs →
                     </Link>
                   </div>
                 ) : (
@@ -406,7 +409,8 @@ export default function Dashboard() {
 
                 {draftCount === 0 ? (
                   <div style={{ padding: '20px', textAlign: 'center' }}>
-                    <p style={{ margin: 0, fontSize: 13, color: '#CBD5E1' }}>No drafts yet</p>
+                    <p style={{ margin: 0, fontSize: 13, color: '#94A3B8', lineHeight: 1.5 }}>Pick a job and let Alex tailor your CV.</p>
+                    <Link to="/dashboard/discover" style={{ display: 'inline-block', marginTop: 8, fontSize: 13, fontWeight: 600, color: '#2563EB', textDecoration: 'none' }}>Find a job to tailor →</Link>
                   </div>
                 ) : (
                   drafts.slice(0, 3).map((draft, i) => (
@@ -451,7 +455,7 @@ function AppRow({ app, divider }) {
         <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {app.title}
         </p>
-        <p style={{ margin: '2px 0 0', fontSize: 11.5, color: '#94A3B8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <p style={{ margin: '2px 0 0', fontSize: 12, color: '#94A3B8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {app.company}
           {app.appliedDate ? ` · ${app.appliedDate}` : ''}
         </p>
@@ -462,7 +466,7 @@ function AppRow({ app, divider }) {
         alignItems: 'center',
         padding: '3px 9px',
         borderRadius: 99,
-        fontSize: 11,
+        fontSize: 12,
         fontWeight: 600,
         ...badge,
       }}>
@@ -497,7 +501,7 @@ function DraftRow({ draft, divider }) {
           {draft.job_title || 'Untitled draft'}
         </p>
         {draft.company && (
-          <p style={{ margin: '2px 0 0', fontSize: 11.5, color: '#94A3B8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <p style={{ margin: '2px 0 0', fontSize: 12, color: '#94A3B8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {draft.company}
           </p>
         )}

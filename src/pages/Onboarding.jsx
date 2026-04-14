@@ -355,6 +355,10 @@ export default function Onboarding() {
         <div className="w-full max-w-lg">
           <StepIndicator step={step} />
 
+          {step >= 3 && (
+            <p className="text-xs text-slate-400 -mt-4 mb-6">Almost there — this helps Alex give you better advice.</p>
+          )}
+
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 md:p-8">
             {steps[step]}
 

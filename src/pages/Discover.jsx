@@ -271,8 +271,9 @@ function computeMatch(raw, countryCode, user) {
   }
 
   const total = criteria.reduce((s,c) => s + c.weight, 0)
-  if (!total) return 50
-  return Math.min(100, Math.max(5, Math.round(criteria.reduce((s,c) => s + c.score*c.weight, 0) / total)))
+  if (!total) return 2.5
+  const raw100 = Math.min(100, Math.max(5, Math.round(criteria.reduce((s,c) => s + c.score*c.weight, 0) / total)))
+  return Math.round((raw100 / 100) * 5 * 10) / 10
 }
 
 function normalizeJob(raw, countryCode, user) {
@@ -302,13 +303,13 @@ function normalizeJob(raw, countryCode, user) {
 
 // ─── Score helpers ────────────────────────────────────────────────────────────
 function getScoreColor(score) {
-  if (score >= 80) return '#16A34A'
-  if (score >= 60) return '#D97706'
+  if (score >= 4.0) return '#16A34A'
+  if (score >= 3.0) return '#D97706'
   return '#94A3B8'
 }
 function getScoreLabel(score) {
-  if (score >= 80) return 'great match'
-  if (score >= 60) return 'good match'
+  if (score >= 4.0) return 'great match'
+  if (score >= 3.0) return 'good match'
   return 'partial match'
 }
 
@@ -442,13 +443,28 @@ function CityContent({ city, onApply }) {
   )
 }
 
+// ─── Score badge helpers ──────────────────────────────────────────────────────
+function getMatchScoreStyle(score) {
+  if (score >= 4.0) return { bg: '#DCFCE7', color: '#16A34A' }
+  if (score >= 2.5) return { bg: '#FEF3C7', color: '#D97706' }
+  return { bg: '#FEE2E2', color: '#DC2626' }
+}
+
 // ─── Inbox card ───────────────────────────────────────────────────────────────
 function InboxCard({ job, onTailor, onSave, onRemove, isExpanded, onToggle, isNew }) {
   const src = SOURCE_STYLES[job.source] || SOURCE_STYLES.other
   const [hovered, setHovered] = useState(false)
+
+  const hasScore    = job.match_score !== null && job.match_score !== undefined
+  const isAnalyzing = !hasScore && job._scoring
+
+  const scoreStyle = hasScore ? getMatchScoreStyle(job.match_score) : null
+  const report     = job.match_report || null
+
   return (
     <div
       className={isNew ? 'job-fade-in' : ''}
+      onClick={onToggle}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -457,13 +473,13 @@ function InboxCard({ job, onTailor, onSave, onRemove, isExpanded, onToggle, isNe
         boxShadow: hovered ? 'inset 3px 0 0 #2563EB' : 'none',
         borderRadius: 12,
         padding: '16px',
+        cursor: 'pointer',
         transition: 'all 200ms',
       }}
     >
-      {/* Header row — click to expand */}
+      {/* Header row */}
       <div
-        onClick={onToggle}
-        style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 4, cursor: 'pointer' }}
+        style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 4 }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
           <h3 style={{ fontSize: 15, fontWeight: 600, color: '#0F172A', lineHeight: 1.35, margin: 0 }}>{job.title}</h3>
@@ -482,9 +498,80 @@ function InboxCard({ job, onTailor, onSave, onRemove, isExpanded, onToggle, isNe
         </div>
       </div>
 
+      {/* Score row */}
+      {(isAnalyzing || hasScore) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          {isAnalyzing ? (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              fontSize: 11, fontWeight: 500, color: '#94A3B8',
+              background: '#F1F5F9', borderRadius: 6, padding: '3px 8px',
+            }}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }}>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
+                  d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+              </svg>
+              Analyzing fit…
+            </span>
+          ) : (
+            <>
+              <span style={{
+                fontSize: 12, fontWeight: 700,
+                background: scoreStyle.bg, color: scoreStyle.color,
+                borderRadius: 6, padding: '3px 8px',
+              }}>
+                {job.match_score.toFixed(1)} / 5
+              </span>
+              {report?.verdict && (
+                <span style={{
+                  fontSize: 12, color: '#64748B',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  flex: 1, minWidth: 0,
+                }}>
+                  {report.verdict}
+                </span>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Expanded score report */}
+      {isExpanded && hasScore && report && (
+        <div style={{
+          background: '#F8FAFC', borderRadius: 8, padding: '10px 12px',
+          marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 6,
+        }}>
+          {report.strengths?.length > 0 && (
+            <div>
+              {report.strengths.map((s, i) => (
+                <p key={i} style={{ margin: '0 0 3px', fontSize: 12, color: '#16A34A', lineHeight: 1.4 }}>
+                  ✓ {s}
+                </p>
+              ))}
+            </div>
+          )}
+          {report.gaps?.length > 0 && (
+            <div>
+              {report.gaps.map((g, i) => (
+                <p key={i} style={{ margin: '0 0 3px', fontSize: 12, color: '#D97706', lineHeight: 1.4 }}>
+                  ⚠ {g}
+                </p>
+              ))}
+            </div>
+          )}
+          {report.salary_range && (
+            <p style={{ margin: 0, fontSize: 11, color: '#94A3B8' }}>
+              Est. range: {report.salary_range}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Description */}
       {job.description && (
-        <div onClick={onToggle} style={{ marginBottom: 12, cursor: 'pointer' }}>
+        <div style={{ marginBottom: 12 }}>
           {isExpanded ? (
             <>
               <p style={{ fontSize: 13, color: '#64748B', lineHeight: 1.6, margin: 0 }}>{job.description}</p>
@@ -555,8 +642,9 @@ function InboxCard({ job, onTailor, onSave, onRemove, isExpanded, onToggle, isNe
 
 // ─── Browse card (compact Adzuna) ─────────────────────────────────────────────
 function BrowseCard({ job, applied, onApply, onTailor, isExpanded, onToggle }) {
-  const scoreColor = getScoreColor(job.score)
-  const scoreLabel = getScoreLabel(job.score)
+  const displayScore = job.score > 5 ? Math.round((job.score / 100) * 5 * 10) / 10 : job.score
+  const scoreColor = getScoreColor(displayScore)
+  const scoreLabel = getScoreLabel(displayScore)
   const [hovered, setHovered] = useState(false)
   return (
     <div
@@ -568,7 +656,7 @@ function BrowseCard({ job, applied, onApply, onTailor, isExpanded, onToggle }) {
         boxShadow: hovered ? 'inset 3px 0 0 #2563EB' : 'none',
         borderRadius: 10,
         padding: '12px 14px',
-        opacity: job.score < 40 ? 0.55 : 1,
+        opacity: displayScore < 2.0 ? 0.55 : 1,
         transition: 'all 200ms',
       }}
     >
@@ -577,7 +665,7 @@ function BrowseCard({ job, applied, onApply, onTailor, isExpanded, onToggle }) {
         <p style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#0F172A', lineHeight: 1.35, margin: 0 }}>{job.title}</p>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           <div style={{ textAlign: 'right' }}>
-            <span style={{ fontSize: 16, fontWeight: 700, color: scoreColor, lineHeight: 1 }}>{job.score}</span>
+            <span style={{ fontSize: 16, fontWeight: 700, color: scoreColor, lineHeight: 1 }}>{displayScore.toFixed(1)}<span style={{ fontSize: 10, fontWeight: 500 }}>/5</span></span>
             <p style={{ fontSize: 10, color: scoreColor, margin: '1px 0 0', lineHeight: 1 }}>{scoreLabel}</p>
           </div>
           <svg style={{ width: 14, height: 14, color: '#94A3B8', transition: 'transform 200ms', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', flexShrink: 0 }}
@@ -820,6 +908,73 @@ export default function Discover() {
     }
   }
 
+  // ── Scoring helpers ──────────────────────────────────────────────────────────
+  const buildUserProfileString = (profile) => {
+    if (!profile) return 'No profile available.'
+    const parts = []
+    if (profile.name)
+      parts.push(`Name: ${profile.name}`)
+    if (profile.city || profile.country)
+      parts.push(`Location: ${[profile.city, profile.country].filter(Boolean).join(', ')}`)
+    if (profile.sectors?.length)
+      parts.push(`Target sectors: ${profile.sectors.join(', ')}`)
+    if (profile.contract_type)
+      parts.push(`Preferred contract: ${profile.contract_type}`)
+    if (profile.work_mode)
+      parts.push(`Work mode: ${profile.work_mode}`)
+    if (profile.languages?.length) {
+      const langs = profile.languages
+        .filter(l => l.lang)
+        .map(l => `${l.lang} (${l.level})`)
+        .join(', ')
+      if (langs) parts.push(`Languages: ${langs}`)
+    }
+    if (profile.cv_text)
+      parts.push(`\nFULL CV:\n${profile.cv_text.trim()}`)
+    return parts.join('\n')
+  }
+
+  const scoreJobInBackground = async (job) => {
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single()
+
+      const userProfile = buildUserProfileString(profile)
+
+      const res = await fetch('/api/score-job', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jobTitle: job.title,
+          company: job.company,
+          jobDescription: job.description,
+          userProfile
+        })
+      })
+
+      const { score, report } = await res.json()
+
+      if (score === null) return
+
+      await supabase
+        .from('job_inbox')
+        .update({ match_score: score, match_report: report })
+        .eq('id', job.id)
+
+      setInboxJobs(prev => prev.map(j =>
+        j.id === job.id
+          ? { ...j, match_score: score, match_report: report }
+          : j
+      ))
+
+    } catch (err) {
+      console.error('[scoring] caught error:', err)
+    }
+  }
+
   // ── Import bar handler ──────────────────────────────────────────────────────
   const handleInlineImport = async () => {
     if (!importBarUrl.trim() || !session?.user?.id) return
@@ -844,16 +999,23 @@ export default function Discover() {
           description: data.description || '',
           url: importBarUrl.trim(),
           source: data.source || detectSource(importBarUrl.trim()),
+          match_score: null,
+          match_report: null,
         })
         .select()
         .single()
 
       if (dbErr) throw dbErr
-      setInboxJobs(prev => [inserted, ...prev])
+
+      // Prepend immediately with _scoring flag to show "Analyzing…" badge
+      setInboxJobs(prev => [{ ...inserted, _scoring: true }, ...prev])
       setImportBarUrl('')
       setNewJobId(inserted.id)
       setTimeout(() => setNewJobId(null), 600)
       posthog.capture('job_imported_url', { source: inserted.source })
+
+      // Score in background — non-blocking
+      scoreJobInBackground(inserted)
     } catch {
       setImportBarError('Could not read this page. Try adding manually.')
     } finally {
@@ -875,6 +1037,7 @@ export default function Discover() {
     await addManualJob({
       title: job.title, company: job.company,
       location: job.location || '', description: job.description || '', jobUrl: job.url || '',
+      matchScore: job.match_score ?? null,
     })
     await supabase.from('job_inbox').delete().eq('id', job.id)
     setInboxJobs(prev => prev.filter(j => j.id !== job.id))

@@ -105,7 +105,7 @@ function App() {
             <RequireOnboarded><DashboardLayout /></RequireOnboarded>
           }>
             <Route index element={<Dashboard />} />
-            <Route path="discover" element={<Discover />} />
+            <Route path="discover" element={<Discover />} />{/* Sidebar label: "My Jobs" */}
             <Route path="tailoring-lab" element={<TailoringLab />} />
             <Route path="tracker" element={<Tracker />} />
             <Route path="alex" element={<Alex />} />

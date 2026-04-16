@@ -211,7 +211,7 @@ export default function Dashboard() {
           position: 'relative',
           zIndex: 10,
         }}>
-          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 20, alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 20, alignItems: isMobile ? 'stretch' : 'flex-start' }}>
 
             {/* ── LEFT COLUMN (58%) ── */}
             <div style={{ flex: isMobile ? 'none' : '0 0 58%', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -443,6 +443,8 @@ function AppRow({ app, divider }) {
         alignItems: 'center',
         gap: 12,
         padding: '12px 20px',
+        width: '100%',
+        boxSizing: 'border-box',
         background: hov ? '#FAFBFC' : 'transparent',
         borderBottom: divider ? '1px solid #F8FAFC' : 'none',
         textDecoration: 'none',

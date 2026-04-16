@@ -1005,6 +1005,7 @@ export default function TailoringLab() {
   const [alexInput, setAlexInput]         = useState('')
   const [alexLoading, setAlexLoading]     = useState(false)
   const [alexBanner, setAlexBanner]       = useState(null) // { text, prevCv, prevCover }
+  const [alexExpanded, setAlexExpanded]   = useState(false)
   const [changelog, setChangelog]         = useState([])   // [{ type, text }]
   const [changelogOpen, setChangelogOpen] = useState(false)
   const ALEX_PILLS = ['Make it more concise', 'Add more impact', 'Match keywords better', 'Adjust tone']
@@ -1394,7 +1395,7 @@ export default function TailoringLab() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="p-4 md:p-8 page-fade-in flex flex-col md:h-dvh md:overflow-hidden">
+    <div className="p-4 md:p-8 page-fade-in flex flex-col h-full md:overflow-hidden">
       {/* Template selector modal */}
       {templateModal && (
         <TemplateModal
@@ -1405,14 +1406,23 @@ export default function TailoringLab() {
         />
       )}
 
-      {/* Header */}
-      <div className="mb-5 flex-shrink-0">
+      <style>{`
+        @keyframes btnPop {
+          0%   { transform: scale(1) }
+          40%  { transform: scale(1.22) }
+          70%  { transform: scale(0.92) }
+          100% { transform: scale(1) }
+        }
+      `}</style>
+
+      {/* Header — hidden on mobile when a job is active (saves screen space) */}
+      <div className={`flex-shrink-0 mb-3 md:mb-5${activeJob ? ' hidden md:block' : ''}`}>
         <h1 className="text-2xl font-bold text-slate-900">Tailoring Lab</h1>
         <p className="text-slate-500 mt-1 text-sm">AI-powered CV and cover letter tailored to each job</p>
       </div>
 
       {/* ── Main tabs ── */}
-      <div className="flex items-center gap-1 mb-6 border-b border-slate-200 flex-shrink-0">
+      <div className="flex items-center gap-1 mb-4 md:mb-6 border-b border-slate-200 flex-shrink-0">
         {[
           { key: 'new', label: 'New Application' },
           { key: 'drafts', label: `Drafts${drafts.length > 0 ? ` (${drafts.length})` : ''}` },
@@ -1495,10 +1505,30 @@ export default function TailoringLab() {
             })()
           ) : (
             /* ── Two-column layout ── */
-            <div className="flex flex-col md:flex-row gap-6 flex-1 min-h-0 md:overflow-hidden">
+            <div className="flex flex-col md:flex-row gap-2 md:gap-6 flex-1 min-h-0 overflow-hidden">
 
-              {/* ─ LEFT COLUMN (35%) — order-2 on mobile so CV shows first ─ */}
-              <div className="w-full md:w-80 flex-shrink-0 flex flex-col gap-4 md:overflow-y-auto md:h-[calc(100dvh-200px)] order-2 md:order-1">
+              {/* ─ Mobile compact job bar ─────────────────────────────────── */}
+              <div className="md:hidden flex-shrink-0 bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-semibold text-slate-900 truncate">{activeJob.title}</p>
+                  <p className="text-xs text-slate-500 truncate">
+                    {[activeJob.company, activeJob.location].filter(Boolean).join(' · ')}
+                  </p>
+                </div>
+                {activeJob.url && (
+                  <a href={activeJob.url} target="_blank" rel="noopener noreferrer"
+                    className="text-xs text-apex-blue hover:underline flex-shrink-0">
+                    View ↗
+                  </a>
+                )}
+                <button onClick={handleChangeJob}
+                  className="text-xs text-slate-400 hover:text-slate-600 flex-shrink-0 px-2 py-1 rounded-lg hover:bg-slate-50">
+                  Change
+                </button>
+              </div>
+
+              {/* ─ LEFT COLUMN — desktop only ─────────────────────────────── */}
+              <div className="hidden md:flex w-80 flex-shrink-0 flex-col gap-4 overflow-y-auto h-full">
 
                 {/* Job info card */}
                 <div className="bg-white rounded-xl border border-slate-200 p-5">
@@ -1654,8 +1684,8 @@ export default function TailoringLab() {
                 )}
               </div>
 
-              {/* ─ RIGHT COLUMN (flex-1) — order-1 on mobile so CV shows first ─ */}
-              <div className="flex-1 min-w-0 flex flex-col md:overflow-hidden order-1 md:order-2">
+              {/* ─ RIGHT COLUMN ───────────────────────────────────────────── */}
+              <div className="flex-1 min-w-0 flex flex-col min-h-0">
 
                 {/* Idle */}
                 {phase === 'idle' && (
@@ -1765,7 +1795,7 @@ export default function TailoringLab() {
 
                 {/* Done — full editor */}
                 {phase === 'done' && (tailoredCV || coverLetter) && (
-                  <div className="flex-1 bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col">
+                  <div className="flex-1 min-h-0 bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col">
 
                     {/* Doc tab bar */}
                     <div className="flex items-center border-b border-slate-200 px-1 flex-shrink-0">
@@ -1782,7 +1812,43 @@ export default function TailoringLab() {
                           {label}
                         </button>
                       ))}
-                      <div className="ml-auto flex items-center gap-3 px-4">
+                      <div className="ml-auto flex items-center gap-1 md:gap-3 px-2 md:px-4">
+                        {/* Mobile: download active doc */}
+                        {((activeDocTab === 'cv' && tailoredCV) || (activeDocTab === 'cover' && coverLetter)) && (
+                          <button
+                            onClick={() => handleDownload(activeDocTab)}
+                            disabled={!!downloading}
+                            className="md:hidden p-1.5 rounded-lg text-slate-400 hover:text-apex-blue hover:bg-slate-50 transition-all duration-100 active:scale-90 disabled:opacity-50"
+                            title={activeDocTab === 'cv' ? 'Download CV' : 'Download Cover Letter'}
+                          >
+                            {downloading
+                              ? <span className="inline-block w-4 h-4 rounded-full border border-slate-400/30 border-t-slate-500 animate-spin" />
+                              : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                            }
+                          </button>
+                        )}
+                        {/* Mobile: Add to Tracker */}
+                        <button
+                          onClick={handleAddToTracker}
+                          disabled={addedToTracker}
+                          className={`md:hidden p-1.5 rounded-lg transition-all duration-100 active:scale-90 ${
+                            addedToTracker
+                              ? 'text-green-600'
+                              : 'text-slate-400 hover:text-apex-blue hover:bg-slate-50'
+                          }`}
+                          title={addedToTracker ? 'Added to Tracker' : 'Add to Tracker'}
+                        >
+                          {addedToTracker
+                            ? <svg className="w-4 h-4" style={{ animation: 'btnPop 0.35s ease forwards' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                              </svg>
+                            : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                              </svg>
+                          }
+                        </button>
                         {/* Preview / Edit toggle — desktop only */}
                         <div className="hidden md:flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
                           {['preview', 'edit'].map(mode => (
@@ -1805,9 +1871,12 @@ export default function TailoringLab() {
                             setCopied(true)
                             setTimeout(() => setCopied(false), 2000)
                           }}
-                          className={`text-xs transition-colors ${copied ? 'text-green-600' : 'text-slate-400 hover:text-apex-blue'}`}
+                          className={`text-xs transition-all duration-100 active:scale-90 ${copied ? 'text-green-600' : 'text-slate-400 hover:text-apex-blue'}`}
                         >
-                          {copied ? '✓ Copied' : 'Copy'}
+                          {copied
+                            ? <span style={{ display: 'inline-block', animation: 'btnPop 0.35s ease forwards' }}>✓ Copied</span>
+                            : 'Copy'
+                          }
                         </button>
                       </div>
                     </div>
@@ -1878,14 +1947,14 @@ export default function TailoringLab() {
                       )}
                     </div>
 
-                    {/* Bottom action bar */}
-                    <div className="flex-shrink-0 flex flex-col md:flex-row md:items-center gap-2 md:gap-3 px-5 py-4 border-t border-slate-100 bg-slate-50/50">
+                    {/* Bottom action bar — desktop only (mobile actions are in the tab bar) */}
+                    <div className="hidden md:flex flex-shrink-0 md:flex-row md:items-center gap-2 md:gap-3 px-5 py-4 border-t border-slate-100 bg-slate-50/50">
                       {/* Download buttons — only shown when content exists */}
                       {tailoredCV && (
                         <button
                           onClick={() => handleDownload('cv')}
                           disabled={downloading === 'cv'}
-                          className="flex items-center justify-center gap-1.5 w-full md:w-auto px-4 py-3 md:py-2 rounded-lg text-sm font-medium border border-slate-200 text-slate-600 hover:bg-white hover:border-slate-300 transition-all disabled:opacity-60"
+                          className="flex items-center justify-center gap-1.5 w-full md:w-auto px-4 py-3 md:py-2 rounded-lg text-sm font-medium border border-slate-200 text-slate-600 hover:bg-white hover:border-slate-300 transition-all duration-100 active:scale-95 disabled:opacity-60"
                         >
                           {downloading === 'cv'
                             ? <div className="w-3.5 h-3.5 rounded-full border border-slate-400/30 border-t-slate-500 animate-spin" />
@@ -1901,7 +1970,7 @@ export default function TailoringLab() {
                         <button
                           onClick={() => handleDownload('cover')}
                           disabled={downloading === 'cover'}
-                          className="flex items-center justify-center gap-1.5 w-full md:w-auto px-4 py-3 md:py-2 rounded-lg text-sm font-medium border border-slate-200 text-slate-600 hover:bg-white hover:border-slate-300 transition-all disabled:opacity-60"
+                          className="flex items-center justify-center gap-1.5 w-full md:w-auto px-4 py-3 md:py-2 rounded-lg text-sm font-medium border border-slate-200 text-slate-600 hover:bg-white hover:border-slate-300 transition-all duration-100 active:scale-95 disabled:opacity-60"
                         >
                           {downloading === 'cover'
                             ? <div className="w-3.5 h-3.5 rounded-full border border-slate-400/30 border-t-slate-500 animate-spin" />
@@ -1920,7 +1989,7 @@ export default function TailoringLab() {
                       <button
                         onClick={handleAddToTracker}
                         disabled={addedToTracker}
-                        className={`flex items-center justify-center gap-2 w-full md:w-auto px-5 py-3 md:py-2 rounded-lg text-sm font-semibold transition-all ${
+                        className={`flex items-center justify-center gap-2 w-full md:w-auto px-5 py-3 md:py-2 rounded-lg text-sm font-semibold transition-all duration-100 active:scale-95 ${
                           addedToTracker
                             ? 'bg-green-50 text-green-700 border border-green-200 cursor-default'
                             : 'text-white shadow-sm shadow-blue-500/20 hover:opacity-90'
@@ -1928,12 +1997,12 @@ export default function TailoringLab() {
                         style={!addedToTracker ? { background: 'linear-gradient(135deg,#2563EB,#38BDF8)' } : {}}
                       >
                         {addedToTracker ? (
-                          <>
+                          <span className="flex items-center gap-2" style={{ animation: 'btnPop 0.35s ease forwards' }}>
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                             </svg>
                             Added to Tracker
-                          </>
+                          </span>
                         ) : (
                           <>
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1944,6 +2013,109 @@ export default function TailoringLab() {
                         )}
                       </button>
                     </div>
+                  </div>
+                )}
+
+                {/* ── Mobile Ask Alex panel — collapsible, always visible ── */}
+                {phase === 'done' && (tailoredCV || coverLetter) && (
+                  <div className="md:hidden flex-shrink-0 mt-2 bg-white rounded-xl border border-slate-200 overflow-hidden">
+                    {/* Tappable header — expands/collapses the panel */}
+                    <div
+                      className="px-4 py-3 flex items-center gap-2 cursor-pointer select-none"
+                      onClick={() => setAlexExpanded(v => !v)}
+                    >
+                      <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0"
+                        style={{ background: 'linear-gradient(135deg,#2563EB,#38BDF8)' }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="white">
+                          <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" />
+                        </svg>
+                      </div>
+                      <span className="text-xs font-semibold text-slate-700">Ask Alex to edit</span>
+                      <span className="text-xs text-slate-400">
+                        · {activeDocTab === 'cv' ? 'CV' : 'Cover Letter'}
+                      </span>
+                      {alexBanner && !alexExpanded && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-apex-blue flex-shrink-0" />
+                      )}
+                      <button
+                        onClick={e => { e.stopPropagation(); handleRegenerate() }}
+                        className="ml-auto flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors p-1"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      </button>
+                      <svg
+                        className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 flex-shrink-0 ${alexExpanded ? 'rotate-180' : ''}`}
+                        fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+
+                    {/* Expandable body */}
+                    {alexExpanded && (
+                      <div className="border-t border-slate-100">
+                        {alexBanner && (
+                          <div style={{
+                            margin: '10px 12px 0',
+                            padding: '9px 12px',
+                            borderRadius: 10,
+                            background: '#EFF6FF',
+                            border: '1px solid #DBEAFE',
+                            display: 'flex', alignItems: 'center', gap: 8,
+                          }}>
+                            <svg width="13" height="13" fill="none" stroke="#2563EB" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span style={{ fontSize: 12, color: '#1D4ED8', flex: 1, lineHeight: 1.4 }}>{alexBanner.text}</span>
+                            {(alexBanner.prevCv !== null || alexBanner.prevCover !== null) && (
+                              <button
+                                onClick={handleAlexUndo}
+                                style={{ fontSize: 11, fontWeight: 600, color: '#64748B', background: 'none', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap', padding: '2px 6px', borderRadius: 6 }}
+                              >
+                                Undo
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        <div className="p-3 space-y-2">
+                          <div className="flex flex-wrap gap-1.5">
+                            {ALEX_PILLS.map(pill => (
+                              <button
+                                key={pill}
+                                onClick={() => { handleAlexEdit(pill); setAlexExpanded(false) }}
+                                disabled={alexLoading}
+                                className="px-2.5 py-1 rounded-full text-xs font-medium border border-blue-200 text-blue-600 bg-white hover:bg-blue-50 transition-colors disabled:opacity-50"
+                              >
+                                {pill}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={alexInput}
+                              onChange={e => setAlexInput(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') { handleAlexEdit(); setAlexExpanded(false) } }}
+                              placeholder="Or type your request…"
+                              disabled={alexLoading}
+                              className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-apex-blue focus:border-transparent transition-shadow disabled:opacity-50"
+                            />
+                            <button
+                              onClick={() => { handleAlexEdit(); setAlexExpanded(false) }}
+                              disabled={!alexInput.trim() || alexLoading}
+                              className="px-3 py-2 rounded-lg text-xs font-semibold text-white disabled:opacity-50 transition-opacity"
+                              style={{ background: 'linear-gradient(135deg,#2563EB,#38BDF8)' }}
+                            >
+                              {alexLoading
+                                ? <span className="inline-block w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" />
+                                : 'Send'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 

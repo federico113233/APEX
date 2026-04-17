@@ -1,43 +1,128 @@
-import { useEffect, useState } from 'react'
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Outlet, NavLink } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import { useUser } from '../context/UserContext'
 
 // ── Mobile top header ─────────────────────────────────────────────────────────
 function MobileHeader() {
-  const { user } = useUser()
-  const navigate = useNavigate()
+  const { user, session, signOut } = useUser()
+  const [open, setOpen] = useState(false)
+  const dropdownRef = useRef(null)
 
   const initials = user.name
     ? user.name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()
     : '?'
+
+  const email = session?.user?.email ?? ''
+
+  // Close dropdown on outside tap
+  useEffect(() => {
+    if (!open) return
+    const handler = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    document.addEventListener('touchstart', handler)
+    return () => {
+      document.removeEventListener('mousedown', handler)
+      document.removeEventListener('touchstart', handler)
+    }
+  }, [open])
 
   return (
     <header
       className="md:hidden fixed top-0 left-0 right-0 z-30 bg-white border-b border-slate-200 flex items-center justify-between"
       style={{ height: 56, paddingLeft: 16, paddingRight: 16 }}
     >
-      <img src="/apex_full_logo.png" alt="APEX" style={{ height: 24, width: 'auto', objectFit: 'contain' }} />
-      <button
-        onClick={() => navigate('/dashboard/profile')}
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #2563EB, #38BDF8)',
-          color: '#fff',
-          fontSize: 14,
-          fontWeight: 700,
-          border: 'none',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0,
-        }}
-      >
-        {initials}
-      </button>
+      <a href="https://apexapply.app" target="_blank" rel="noopener noreferrer">
+        <img src="/apex_full_logo.png" alt="APEX" style={{ height: 24, width: 'auto', objectFit: 'contain' }} />
+      </a>
+
+      <div ref={dropdownRef} style={{ position: 'relative' }}>
+        <button
+          onClick={() => setOpen((v) => !v)}
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #2563EB, #38BDF8)',
+            color: '#fff',
+            fontSize: 14,
+            fontWeight: 700,
+            border: 'none',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
+          {initials}
+        </button>
+
+        {open && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 44,
+              right: 0,
+              minWidth: 200,
+              background: '#fff',
+              border: '1px solid #e2e8f0',
+              borderRadius: 10,
+              boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+              zIndex: 50,
+              overflow: 'hidden',
+            }}
+          >
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9' }}>
+              {user.name && (
+                <p style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', marginBottom: 2 }}>
+                  {user.name}
+                </p>
+              )}
+              {email && (
+                <p style={{ fontSize: 12, color: '#64748b', wordBreak: 'break-all' }}>
+                  {email}
+                </p>
+              )}
+            </div>
+            <NavLink
+              to="/dashboard/profile"
+              onClick={() => setOpen(false)}
+              style={{
+                display: 'block',
+                padding: '10px 16px',
+                fontSize: 14,
+                fontWeight: 500,
+                color: '#0f172a',
+                textDecoration: 'none',
+                borderBottom: '1px solid #f1f5f9',
+              }}
+            >
+              Edit profile
+            </NavLink>
+            <button
+              onClick={() => { setOpen(false); signOut() }}
+              style={{
+                width: '100%',
+                padding: '10px 16px',
+                textAlign: 'left',
+                fontSize: 14,
+                fontWeight: 500,
+                color: '#dc2626',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              Sign out
+            </button>
+          </div>
+        )}
+      </div>
     </header>
   )
 }

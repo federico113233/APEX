@@ -332,6 +332,139 @@ function ConvItem({ conv, isActive, onSelect, onRename, onDelete, openMenuId, se
   )
 }
 
+function MobileConvItem({ conv, isActive, onSelect, onRename, onDelete, openMenuId, setOpenMenuId }) {
+  const [renaming, setRenaming] = useState(false)
+  const [renameVal, setRenameVal] = useState(conv.title)
+  const [fading, setFading] = useState(false)
+  const renameInputRef = useRef(null)
+  const menuOpen = openMenuId === conv.id
+  const date = new Date(conv.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+
+  const startRename = (e) => {
+    e.stopPropagation()
+    setOpenMenuId(null)
+    setRenameVal(conv.title)
+    setRenaming(true)
+    setTimeout(() => renameInputRef.current?.focus(), 50)
+  }
+
+  const commitRename = () => {
+    const trimmed = renameVal.trim()
+    if (trimmed && trimmed !== conv.title) onRename(conv.id, trimmed)
+    setRenaming(false)
+  }
+
+  const handleDelete = (e) => {
+    e.stopPropagation()
+    setOpenMenuId(null)
+    setFading(true)
+    setTimeout(() => onDelete(conv.id), 300)
+  }
+
+  return (
+    <div style={{ position: 'relative', opacity: fading ? 0 : 1, transition: 'opacity 0.3s ease' }}>
+      {renaming ? (
+        <div style={{ padding: '14px 20px', background: '#EFF6FF', borderLeft: '3px solid #2563EB' }}>
+          <input
+            ref={renameInputRef}
+            value={renameVal}
+            onChange={e => setRenameVal(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { e.preventDefault(); commitRename() }
+              if (e.key === 'Escape') setRenaming(false)
+            }}
+            onBlur={commitRename}
+            style={{
+              width: '100%', border: 'none', outline: 'none',
+              fontSize: 14, fontWeight: 600, color: '#1D4ED8',
+              background: 'transparent', fontFamily: 'inherit',
+            }}
+          />
+          <span style={{ fontSize: 12, color: '#94A3B8', marginTop: 2, display: 'block' }}>{date}</span>
+        </div>
+      ) : (
+        <div
+          style={{
+            display: 'flex', alignItems: 'center',
+            borderBottom: '1px solid #F1F5F9',
+            background: isActive ? '#EFF6FF' : 'transparent',
+          }}
+        >
+          <button
+            onClick={() => onSelect(conv)}
+            style={{
+              flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+              padding: '14px 12px 14px 20px',
+              border: 'none', background: 'transparent',
+              cursor: 'pointer', textAlign: 'left',
+            }}
+          >
+            <span style={{
+              fontSize: 14, fontWeight: isActive ? 600 : 500,
+              color: isActive ? '#1D4ED8' : '#1E293B',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              width: '100%', display: 'block',
+            }}>
+              {conv.title}
+            </span>
+            <span style={{ fontSize: 12, color: '#94A3B8', marginTop: 2 }}>{date}</span>
+          </button>
+          <button
+            onClick={e => { e.stopPropagation(); setOpenMenuId(menuOpen ? null : conv.id) }}
+            style={{
+              flexShrink: 0, width: 44, height: 44,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              border: 'none', background: menuOpen ? '#DBEAFE' : 'transparent',
+              cursor: 'pointer', color: '#64748B', marginRight: 8, borderRadius: 8,
+            }}
+          >
+            <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.5px', lineHeight: 1 }}>···</span>
+          </button>
+        </div>
+      )}
+
+      {menuOpen && !renaming && (
+        <div
+          onMouseDown={e => e.stopPropagation()}
+          onTouchStart={e => e.stopPropagation()}
+          style={{
+            position: 'absolute', right: 8, top: 'calc(100% - 2px)', zIndex: 100,
+            background: '#fff', borderRadius: 10, border: '1px solid #E2E8F0',
+            boxShadow: '0 4px 20px rgba(15,23,42,0.12)', minWidth: 130, overflow: 'hidden',
+          }}
+        >
+          <button
+            onClick={startRename}
+            style={{
+              width: '100%', padding: '13px 16px', textAlign: 'left', border: 'none',
+              background: 'transparent', cursor: 'pointer', fontSize: 14, color: '#0F172A',
+              fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 10,
+            }}
+          >
+            <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            Rename
+          </button>
+          <button
+            onClick={handleDelete}
+            style={{
+              width: '100%', padding: '13px 16px', textAlign: 'left', border: 'none',
+              background: 'transparent', cursor: 'pointer', fontSize: 14, color: '#EF4444',
+              fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 10,
+            }}
+          >
+            <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Delete
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function AlexSidebar({ conversations, activeId, onNew, onSelect, onRename, onDelete }) {
   const [openMenuId, setOpenMenuId] = useState(null)
 
@@ -573,11 +706,24 @@ export default function Alex() {
   // Mobile detection
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [mobileMenuId, setMobileMenuId] = useState(null)
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768)
     window.addEventListener('resize', handler)
     return () => window.removeEventListener('resize', handler)
   }, [])
+
+  // Close mobile menu on outside tap
+  useEffect(() => {
+    if (!mobileMenuId) return
+    const close = () => setMobileMenuId(null)
+    document.addEventListener('mousedown', close)
+    document.addEventListener('touchstart', close)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      document.removeEventListener('touchstart', close)
+    }
+  }, [mobileMenuId])
 
   // Chat state
   const [messages, setMessages]       = useState([])
@@ -854,34 +1000,18 @@ export default function Alex() {
                 No conversations yet
               </p>
             ) : (
-              conversations.map(conv => {
-                const isActive = conv.id === activeConvId
-                const date = new Date(conv.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                return (
-                  <button
-                    key={conv.id}
-                    onClick={() => { handleSelectConversation(conv); setDrawerOpen(false) }}
-                    style={{
-                      width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
-                      padding: '16px 20px',
-                      borderTop: 'none', borderLeft: 'none', borderRight: 'none',
-                      borderBottom: '1px solid #F1F5F9',
-                      background: isActive ? '#EFF6FF' : 'transparent',
-                      cursor: 'pointer', textAlign: 'left',
-                    }}
-                  >
-                    <span style={{
-                      fontSize: 14, fontWeight: isActive ? 600 : 500,
-                      color: isActive ? '#1D4ED8' : '#1E293B',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      width: '100%', display: 'block',
-                    }}>
-                      {conv.title}
-                    </span>
-                    <span style={{ fontSize: 12, color: '#94A3B8', marginTop: 2 }}>{date}</span>
-                  </button>
-                )
-              })
+              conversations.map(conv => (
+                <MobileConvItem
+                  key={conv.id}
+                  conv={conv}
+                  isActive={conv.id === activeConvId}
+                  onSelect={(c) => { handleSelectConversation(c); setDrawerOpen(false) }}
+                  onRename={handleRenameConv}
+                  onDelete={handleDeleteConv}
+                  openMenuId={mobileMenuId}
+                  setOpenMenuId={setMobileMenuId}
+                />
+              ))
             )}
           </div>
         </>

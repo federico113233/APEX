@@ -699,11 +699,23 @@ function DetailPanel({ app, onClose, onStatusChange, onNotesChange, onDelete }) 
     ...(app.description ? [{ key: 'details', label: 'Job Details' }] : []),
   ]
 
+  // On mobile the panel anchors below the 56px mobile header so the close
+  // button is never hidden behind a notch or the header bar itself.
+  const MOBILE_HEADER_H = 56
+  const panelTop    = isMobile ? MOBILE_HEADER_H : 0
+  const panelHeight = isMobile ? `calc(100dvh - ${MOBILE_HEADER_H}px)` : '100dvh'
+
   return (
     <>
-      {/* Overlay */}
+      {/* Overlay — starts at same top as panel so mobile header stays usable */}
       <div
-        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100dvh', zIndex: 40, transition: 'background 0.28s', background: visible ? 'rgba(15,23,42,0.28)' : 'transparent' }}
+        style={{
+          position: 'fixed',
+          top: panelTop, left: 0, right: 0, bottom: 0,
+          zIndex: 40,
+          transition: 'background 0.28s',
+          background: visible ? 'rgba(15,23,42,0.28)' : 'transparent',
+        }}
         onClick={handleClose}
       />
 
@@ -711,9 +723,9 @@ function DetailPanel({ app, onClose, onStatusChange, onNotesChange, onDelete }) 
       <div
         style={{
           position: 'fixed',
-          top: 0,
+          top: panelTop,
           right: 0,
-          height: '100dvh',
+          height: panelHeight,
           width: isMobile ? '100vw' : 500,
           zIndex: 50,
           display: 'flex',
@@ -725,10 +737,10 @@ function DetailPanel({ app, onClose, onStatusChange, onNotesChange, onDelete }) 
         }}
       >
         {/* ── Header ── */}
-        <div style={{ padding: '28px 28px 20px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
+        <div style={{ padding: isMobile ? '14px 16px 14px' : '28px 28px 20px', borderBottom: '1px solid #f1f5f9', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#0f172a', lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <h2 style={{ margin: 0, fontSize: isMobile ? 17 : 20, fontWeight: 700, color: '#0f172a', lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {app.title}
               </h2>
               <p style={{ margin: '4px 0 0', fontSize: 14, color: '#64748b' }}>
@@ -740,9 +752,9 @@ function DetailPanel({ app, onClose, onStatusChange, onNotesChange, onDelete }) 
             </div>
             <button
               onClick={handleClose}
-              style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', color: '#94a3b8', flexShrink: 0 }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.color = '#334155' }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#94a3b8' }}
+              style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 10, border: 'none', background: '#f1f5f9', cursor: 'pointer', color: '#64748b', flexShrink: 0 }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#e2e8f0'; e.currentTarget.style.color = '#334155' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.color = '#64748b' }}
             >
               <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -991,7 +1003,7 @@ function DetailPanel({ app, onClose, onStatusChange, onNotesChange, onDelete }) 
         </div>
 
         {/* ── Footer ── */}
-        <div style={{ padding: '14px 24px', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
+        <div style={{ padding: isMobile ? '12px 16px' : '14px 24px', paddingBottom: isMobile ? 'calc(env(safe-area-inset-bottom, 0px) + 12px)' : 14, borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
           {confirmDelete ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <p style={{ flex: 1, fontSize: 14, color: '#334155', margin: 0 }}>Remove this application?</p>

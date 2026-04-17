@@ -31,16 +31,16 @@ function StepIndicator({ step }) {
   return (
     <div className="mb-8">
       <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           <span
-            className="w-6 h-6 rounded-full text-xs font-bold text-white flex items-center justify-center"
+            className="w-6 h-6 rounded-full text-xs font-bold text-white flex items-center justify-center flex-shrink-0"
             style={{ background: 'linear-gradient(135deg, #2563EB, #38BDF8)' }}
           >
             {step}
           </span>
-          <span className="text-sm font-semibold text-slate-700">{STEPS[step - 1].label}</span>
+          <span className="text-sm font-semibold text-slate-700 truncate">{STEPS[step - 1].label}</span>
         </div>
-        <span className="text-xs text-slate-400 font-medium">{step} of {TOTAL}</span>
+        <span className="text-xs text-slate-400 font-medium flex-shrink-0 ml-2">{step} of {TOTAL}</span>
       </div>
       <div className="flex gap-1.5">
         {STEPS.map(({ n }) => (
@@ -90,19 +90,19 @@ function LanguagesEditor({ value, onChange }) {
             value={entry.lang}
             onChange={(e) => update(i, { lang: e.target.value })}
             placeholder="Language (e.g. English)"
-            className={`${inputCls} flex-1`}
+            className={`${inputCls} flex-1 min-w-0`}
           />
           <select
             value={entry.level}
             onChange={(e) => update(i, { level: e.target.value })}
-            className={`${inputCls} w-36`}
+            className={`${inputCls} w-28 flex-shrink-0`}
           >
             {LANG_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
           </select>
           <button
             type="button"
             onClick={() => remove(i)}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -423,7 +423,7 @@ export default function Onboarding() {
             <button
               type="button"
               onClick={() => setStep((s) => s - 1)}
-              className="px-5 py-3.5 rounded-xl border border-slate-200 font-semibold text-slate-600 bg-white text-sm min-h-[48px]"
+              className="px-5 py-3.5 rounded-xl border border-slate-200 font-semibold text-slate-600 bg-white text-sm min-h-[48px] flex-shrink-0"
             >
               ← Back
             </button>

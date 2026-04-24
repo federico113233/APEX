@@ -10,7 +10,7 @@ import { supabase } from '../lib/supabase'
 import posthog from 'posthog-js'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const MODEL = 'claude-sonnet-4-20250514'
+const MODEL = 'claude-sonnet-4-6'
 
 const ANALYSIS_SYSTEM_PROMPT = `You are an expert career coach analyzing a student's CV against a job description. Your only task is to identify if there is any specific information missing from the CV that would meaningfully improve the tailoring quality. Think about: career motivations, specific skills not mentioned, relevant experiences that might not be in the CV, preferences about tone or emphasis. If you have 1-3 genuinely useful questions, output them as a numbered list. If you have everything you need, output exactly: NO_QUESTIONS. Be strict — only ask if the answer would actually change the output. Never ask obvious or generic questions.`
 

@@ -25,7 +25,7 @@ export default async function handler(req, res) {
         'anthropic-beta': 'prompt-caching-2024-07-31',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: maxTokens,
         system: systemPrompt || 'You are Alex, an AI career advisor.',
         messages,

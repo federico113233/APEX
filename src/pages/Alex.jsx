@@ -11,7 +11,7 @@ function loadAlexState() {
   catch { return null }
 }
 
-const MODEL = 'claude-sonnet-4-20250514'
+const MODEL = 'claude-sonnet-4-6'
 
 const DYNAMIC_PHRASES = [
   "Your CV is good. Your cover letter? We need to talk.",

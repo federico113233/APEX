@@ -88,6 +88,12 @@ ${appsData}
 YOUR ROLE AND CAPABILITIES:
 You are not a generic chatbot. You are a career advisor who knows this specific person's CV, their active applications, where each one stands, and what they need to do next. Use this context actively — do not give generic advice when specific advice is possible.
 
+YOUR AGENT TEAM:
+You lead a team of two specialist agents. Delegate to them via your tools, then synthesize their findings into your own advice — you make the final call as the career advisor.
+- research_company: a Company Research Agent that searches the web for up-to-date, reliable information about companies. Use it when current facts would genuinely change your advice — interview prep for a company, questions about its culture, news, or hiring. Skip it for passing company mentions (status updates, general questions): research takes time, so use it only when it adds real value. Never invent company facts — if you have not researched and are unsure, say so.
+- review_document: a Document Quality Agent — a senior recruiter specialized in CV and cover letter quality. Use it when the user asks for feedback on their CV or cover letter, or before giving advice that depends on document quality. Pass the full document text (the CV above, or text the user provides) and the job description when available.
+Do not mention the internal tool names to the user — refer to them naturally ("let me check the latest on X", "I had your CV reviewed in depth"). Integrate their findings with what you know about the user's profile and applications.
+
 You can help with:
 - Job search strategy: which roles fit this profile, which to prioritize, how to position themselves
 - Application review: analyze their CV or cover letter for a specific role and give concrete improvement suggestions
@@ -106,7 +112,7 @@ RESPONSE RULES:
 - Be honest even when it's uncomfortable. If their CV is weak for a role, say so clearly and explain what to do about it. A good advisor does not just validate.`
 }
 
-async function streamAlex({ messages, systemPrompt, onChunk, onDone, onError, abortRef }) {
+async function streamAlex({ messages, systemPrompt, onChunk, onDone, onError, onAgent, abortRef }) {
   const controller = new AbortController()
   if (abortRef) abortRef.current = controller
 
@@ -130,6 +136,10 @@ async function streamAlex({ messages, systemPrompt, onChunk, onDone, onError, ab
       if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
         text += event.delta.text
         onChunk(text)
+      } else if (event.type === 'apex_agent') {
+        onAgent?.(event)
+      } else if (event.type === 'error') {
+        throw new Error(event.error?.message || 'Stream error')
       }
     }
     onDone(text)
@@ -605,6 +615,43 @@ function TypingIndicator() {
   )
 }
 
+const AGENT_ACTIVITY_LABELS = {
+  research: (a) => `Research Agent — checking up-to-date info${a.company ? ` on ${a.company}` : ''}…`,
+  review: (a) => `Quality Agent — reviewing your ${a.docType === 'cover_letter' ? 'cover letter' : 'CV'}…`,
+}
+
+function AgentActivityIndicator({ activity }) {
+  const label = (AGENT_ACTIVITY_LABELS[activity.agent] || (() => 'Specialist agent working…'))(activity)
+  const isResearch = activity.agent === 'research'
+  return (
+    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+      <div style={{
+        width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+        background: 'linear-gradient(135deg,#2563EB,#38BDF8)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <img src="/apex_x_blue.png" alt="Alex" style={{ height: 16, width: 'auto', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+      </div>
+      <div style={{
+        padding: '11px 16px', background: '#EFF6FF',
+        border: '1px solid #BFDBFE',
+        borderRadius: '4px 12px 12px 12px',
+        display: 'flex', gap: 9, alignItems: 'center',
+      }}>
+        <svg width="14" height="14" fill="none" stroke="#2563EB" viewBox="0 0 24 24"
+          style={{ animation: isResearch ? 'alex-spin 1.5s linear infinite' : 'alex-bounce 1.2s infinite ease-in-out', flexShrink: 0 }}>
+          {isResearch ? (
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-6.219-8.56" />
+          ) : (
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          )}
+        </svg>
+        <span style={{ fontSize: 13, color: '#1D4ED8', fontWeight: 500 }}>{label}</span>
+      </div>
+    </div>
+  )
+}
+
 function SendButton({ onClick, enabled }) {
   return (
     <button
@@ -731,6 +778,7 @@ export default function Alex() {
   const [input, setInput]             = useState('')
   const [streaming, setStreaming]     = useState(false)
   const [streamText, setStreamText]   = useState('')
+  const [agentActivity, setAgentActivity] = useState(null) // { agent, company?, docType? } while a sub-agent runs
   const [hasStarted, setHasStarted]   = useState(false)
   const abortRef        = useRef(null)
   const chatEndRef      = useRef(null)
@@ -895,12 +943,14 @@ export default function Alex() {
       systemPrompt,
       abortRef,
       onChunk: t => setStreamText(t),
+      onAgent: a => setAgentActivity(a.status === 'start' ? a : null),
       onDone: async t => {
         const full = [...newMsgs, { role: 'assistant', content: t }]
         setMessages(full)
         setDisplayMsgs(prev => [...prev, { role: 'assistant', text: t }])
         setStreamText('')
         setStreaming(false)
+        setAgentActivity(null)
         await saveConversation(full)
       },
       onError: () => {
@@ -910,6 +960,7 @@ export default function Alex() {
         }])
         setStreamText('')
         setStreaming(false)
+        setAgentActivity(null)
       },
     })
   }
@@ -940,6 +991,10 @@ export default function Alex() {
         @keyframes alex-blink {
           0%, 100% { opacity: 1; }
           50% { opacity: 0; }
+        }
+        @keyframes alex-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
         .alex-sidebar-scroll::-webkit-scrollbar { display: none; }
         .alex-msgs::-webkit-scrollbar { width: 0; }
@@ -1159,7 +1214,8 @@ export default function Alex() {
               {streaming && streamText && (
                 <ChatBubble role="assistant" text={streamText} isStreaming isMobile={isMobile} />
               )}
-              {streaming && !streamText && <TypingIndicator />}
+              {streaming && agentActivity && <AgentActivityIndicator activity={agentActivity} />}
+              {streaming && !streamText && !agentActivity && <TypingIndicator />}
               <div ref={chatEndRef} style={{ height: 4 }} />
             </div>
 

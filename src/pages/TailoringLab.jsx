@@ -1004,6 +1004,7 @@ export default function TailoringLab() {
   const [descExpanded, setDescExpanded]   = useState(false)
   const [alexInput, setAlexInput]         = useState('')
   const [alexLoading, setAlexLoading]     = useState(false)
+  const [alexAgentStatus, setAlexAgentStatus] = useState(null) // sub-agent activity label while Alex works
   const [alexBanner, setAlexBanner]       = useState(null) // { text, prevCv, prevCover }
   const [alexExpanded, setAlexExpanded]   = useState(false)
   const [changelog, setChangelog]         = useState([])   // [{ type, text }]
@@ -1328,14 +1329,23 @@ export default function TailoringLab() {
     const docType = activeDocTab === 'cv' ? 'CV' : 'Cover Letter'
 
     try {
+      const jobContext = activeJob
+        ? `\n\nTarget job: ${activeJob.title} at ${activeJob.company}${activeJob.description ? `\nJob description (excerpt): ${activeJob.description.slice(0, 1500)}` : ''}`
+        : ''
+
       const res = await fetch('/api/tailoring', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [{ role: 'user', content: `Here is the current ${docType}:\n\n${doc}\n\nUser request: ${req}\n\nPlease apply the edit and return the full modified ${docType}.` }],
-          systemPrompt: `You are Alex, an expert CV and cover letter editor. The user wants you to edit their ${docType}.\nReturn ONLY the modified document text — no explanations, no preamble, no markdown code blocks, just the document.\nAfter the document, output exactly: |||ALEX_MSG|||\nThen output one short sentence (max 15 words) describing what you changed, starting with "Done!"`,
+          messages: [{ role: 'user', content: `Here is the current ${docType}:\n\n${doc}${jobContext}\n\nUser request: ${req}\n\nPlease apply the edit and return the full modified ${docType}.` }],
+          systemPrompt: `You are Alex, an expert CV and cover letter editor. The user wants you to edit their ${docType}.
+YOUR AGENT TEAM: you can delegate via tools before writing the final document — use review_document to get a specialist quality assessment of the current ${docType} when the request is about overall quality, impact, or keyword match; use research_company when tailoring to the company would benefit from up-to-date facts about it. Use them only when they genuinely improve the edit, then apply what you learned.
+OUTPUT CONTRACT (strict): return ONLY the modified document text — no explanations, no preamble, no markdown code blocks, just the document.
+After the document, output exactly: |||ALEX_MSG|||
+Then output one short sentence (max 15 words) describing what you changed, starting with "Done!"`,
           stream: true,
           maxTokens: 4096,
+          agentic: true,
         }),
       })
 
@@ -1345,6 +1355,13 @@ export default function TailoringLab() {
       for await (const event of parseSSE(res)) {
         if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
           fullText += event.delta.text
+        } else if (event.type === 'apex_agent') {
+          setAlexAgentStatus(
+            event.status !== 'start' ? null
+              : event.agent === 'research'
+                ? `Checking up-to-date info${event.company ? ` on ${event.company}` : ''}…`
+                : 'Quality agent reviewing the document…'
+          )
         }
       }
 
@@ -1364,6 +1381,7 @@ export default function TailoringLab() {
       setAlexBanner({ text: 'Something went wrong. Please try again.', prevCv: null, prevCover: null })
     } finally {
       setAlexLoading(false)
+      setAlexAgentStatus(null)
     }
   }
 
@@ -1626,6 +1644,21 @@ export default function TailoringLab() {
                             Undo
                           </button>
                         ) : null}
+                      </div>
+                    )}
+
+                    {/* Sub-agent activity */}
+                    {alexLoading && alexAgentStatus && (
+                      <div style={{
+                        margin: '12px 12px 0',
+                        padding: '8px 14px',
+                        borderRadius: 10,
+                        background: '#EFF6FF',
+                        border: '1px solid #BFDBFE',
+                        display: 'flex', alignItems: 'center', gap: 8,
+                      }}>
+                        <span className="inline-block w-3 h-3 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin flex-shrink-0" />
+                        <span style={{ fontSize: 12, color: '#1D4ED8', fontWeight: 500 }}>{alexAgentStatus}</span>
                       </div>
                     )}
 
@@ -2077,6 +2110,19 @@ export default function TailoringLab() {
                                 Undo
                               </button>
                             )}
+                          </div>
+                        )}
+                        {alexLoading && alexAgentStatus && (
+                          <div style={{
+                            margin: '10px 12px 0',
+                            padding: '8px 12px',
+                            borderRadius: 10,
+                            background: '#EFF6FF',
+                            border: '1px solid #BFDBFE',
+                            display: 'flex', alignItems: 'center', gap: 8,
+                          }}>
+                            <span className="inline-block w-3 h-3 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin flex-shrink-0" />
+                            <span style={{ fontSize: 12, color: '#1D4ED8', fontWeight: 500 }}>{alexAgentStatus}</span>
                           </div>
                         )}
                         <div className="p-3 space-y-2">

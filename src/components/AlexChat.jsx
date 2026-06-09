@@ -60,6 +60,12 @@ function buildSystemPrompt(user, applications) {
   prompt +=
     '\n\nWhen the student mentions a rejection, interview invite, or offer, acknowledge it warmly and confirm the tracker has been updated.'
 
+  prompt +=
+    '\n\nYOUR AGENT TEAM: you lead two specialist agents, reachable via your tools. ' +
+    'Use research_company when up-to-date company facts would genuinely change your advice (interview prep, company culture, news) — skip it for passing company mentions, and never invent company facts. ' +
+    'Use review_document when the student wants CV or cover letter feedback. ' +
+    'Synthesize their findings into your own advice and never mention the internal tool names.'
+
   return prompt
 }
 
@@ -198,9 +204,17 @@ export default function AlexChat() {
         if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
           fullText += event.delta.text
           setMessages((prev) =>
-            prev.map((m) => (m.id === alexId ? { ...m, text: fullText, pending: false } : m))
+            prev.map((m) => (m.id === alexId ? { ...m, text: fullText, pending: false, agentStatus: null } : m))
           )
           bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+        } else if (event.type === 'apex_agent') {
+          const label = event.status !== 'start' ? null
+            : event.agent === 'research'
+              ? `Checking up-to-date info${event.company ? ` on ${event.company}` : ''}…`
+              : `Reviewing your ${event.docType === 'cover_letter' ? 'cover letter' : 'CV'}…`
+          setMessages((prev) =>
+            prev.map((m) => (m.id === alexId && !fullText ? { ...m, agentStatus: label } : m))
+          )
         }
       }
 
@@ -298,11 +312,20 @@ export default function AlexChat() {
                   }`}
                 >
                   {msg.pending && !msg.text ? (
+                    msg.agentStatus ? (
+                      <span className="flex gap-1.5 items-center text-xs text-apex-blue font-medium">
+                        <svg className="w-3 h-3 animate-spin flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-6.219-8.56" />
+                        </svg>
+                        {msg.agentStatus}
+                      </span>
+                    ) : (
                     <span className="flex gap-1 items-center h-4">
                       <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                       <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                       <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                     </span>
+                    )
                   ) : (
                     <span style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</span>
                   )}

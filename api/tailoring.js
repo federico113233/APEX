@@ -1,4 +1,10 @@
 // /api/tailoring.js — Serverless proxy for Anthropic API (TailoringLab)
+// Supports an optional `agentic: true` mode used by Alex inside the lab,
+// which enables the multi-agent loop (research + document review sub-agents).
+import { createClient, runAlexAgentic } from './_lib/agents.js'
+
+export const config = { maxDuration: 60 }
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
@@ -10,11 +16,39 @@ export default async function handler(req, res) {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' })
 
-  const { messages, systemPrompt, stream = false, maxTokens = 4096 } = req.body
+  const { messages, systemPrompt, stream = false, maxTokens = 4096, agentic = false } = req.body
   if (!messages || !Array.isArray(messages)) {
     return res.status(400).json({ error: 'messages array required' })
   }
 
+  // ── Agentic mode (Alex in the lab: orchestrator + sub-agents) ──────────────
+  if (agentic && stream) {
+    try {
+      res.setHeader('Content-Type', 'text/event-stream')
+      res.setHeader('Cache-Control', 'no-cache')
+      res.setHeader('Connection', 'keep-alive')
+
+      const client = createClient(apiKey)
+      const write = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`)
+      await runAlexAgentic({
+        client,
+        messages,
+        system: systemPrompt || 'You are Alex, an expert CV and cover letter editor.',
+        maxTokens,
+        write,
+      })
+      return res.end()
+    } catch (err) {
+      console.error('[Tailoring API agentic]', err)
+      if (res.headersSent) {
+        res.write(`data: ${JSON.stringify({ type: 'error', error: { message: err.message } })}\n\n`)
+        return res.end()
+      }
+      return res.status(500).json({ error: err.message || 'Failed to reach Anthropic' })
+    }
+  }
+
+  // ── Plain proxy mode (generation / analysis flows) ─────────────────────────
   try {
     const upstream = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',

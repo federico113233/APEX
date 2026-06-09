@@ -787,6 +787,30 @@ function DetailPanel({ app, onClose, onStatusChange, onNotesChange, onDelete }) 
                 Add to Google Calendar
               </button>
             )}
+            <button
+              onClick={() => {
+                onClose()
+                navigate('/dashboard/interview-studio', {
+                  state: { job: { title: app.title, company: app.company, description: app.description || '' } },
+                })
+              }}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '5px 12px',
+                borderRadius: 999, border: '1.5px solid #bfdbfe',
+                background: '#eff6ff', color: '#2563eb',
+                fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                transition: 'background 0.15s, box-shadow 0.15s',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#dbeafe'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(37,99,235,0.18)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.boxShadow = 'none' }}
+            >
+              <svg width="13" height="13" fill="none" stroke="#2563eb" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2}
+                  d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M12 14a3 3 0 003-3V7a3 3 0 10-6 0v4a3 3 0 003 3z" />
+              </svg>
+              Practice interview
+            </button>
           </div>
         </div>
 

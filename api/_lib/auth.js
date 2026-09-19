@@ -38,8 +38,18 @@ export async function requireAuth(req, res) {
     return null
   }
 
+  let admin
   try {
-    const { data: { user }, error } = await getAdminClient().auth.getUser(token)
+    admin = getAdminClient()
+  } catch (err) {
+    // Misconfiguration is a server problem, not a login problem: say so clearly.
+    console.error('[auth] server not configured:', err.message)
+    res.status(500).json({ error: 'Server auth not configured (SUPABASE_SERVICE_ROLE_KEY missing)' })
+    return null
+  }
+
+  try {
+    const { data: { user }, error } = await admin.auth.getUser(token)
     if (error || !user) {
       res.status(401).json({ error: 'Unauthorized' })
       return null

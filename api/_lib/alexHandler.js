@@ -3,15 +3,21 @@
 // Anthropic-style SSE events plus custom `apex_agent` status events.
 
 import { createClient, runAlexAgentic } from './agents.js'
+import { setCorsHeaders, requireAuth } from './auth.js'
+import { checkAndIncrement } from './entitlements.js'
 
 export function createAlexHandler({ defaultMaxTokens, tag }) {
   return async function handler(req, res) {
-    res.setHeader('Access-Control-Allow-Origin', '*')
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+    setCorsHeaders(req, res)
 
     if (req.method === 'OPTIONS') return res.status(200).end()
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+    const user = await requireAuth(req, res)
+    if (!user) return
+
+    const limit = await checkAndIncrement(user.id, 'alex')
+    if (limit) return res.status(402).json(limit)
 
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' })

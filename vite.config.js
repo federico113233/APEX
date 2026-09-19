@@ -69,6 +69,7 @@ export default defineConfig(({ mode }) => {
   Object.assign(process.env, env)
   // Bridge VITE_-prefixed vars to their bare equivalents for serverless handlers
   if (env.VITE_ANTHROPIC_API_KEY) process.env.ANTHROPIC_API_KEY = env.VITE_ANTHROPIC_API_KEY
+  if (env.VITE_SUPABASE_URL) process.env.SUPABASE_URL = env.VITE_SUPABASE_URL
 
   return {
     plugins: [react(), tailwindcss(), vercelDevPlugin()],

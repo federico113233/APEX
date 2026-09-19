@@ -7,6 +7,8 @@ import {
 } from 'docx'
 import { useUser } from '../context/UserContext'
 import { supabase } from '../lib/supabase'
+import { apiFetch, PlanLimitError } from '../lib/apiFetch'
+import LimitReachedModal from '../components/LimitReachedModal'
 import posthog from 'posthog-js'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -995,6 +997,7 @@ export default function TailoringLab() {
   })
   const [viewMode, setViewMode]         = useState('preview') // 'preview' | 'edit'
   const [error, setError]               = useState(null)
+  const [limitReached, setLimitReached] = useState(false)
   const [addedToTracker, setAddedToTracker] = useState(false)
   const [downloading, setDownloading]   = useState(null)
   const [templateModal, setTemplateModal] = useState(null) // null | { type: 'cv' | 'cover' }
@@ -1144,7 +1147,7 @@ export default function TailoringLab() {
     setPhase('analyzing')
     setError(null)
     try {
-      const res = await fetch('/api/tailoring', {
+      const res = await apiFetch('/api/tailoring', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1169,6 +1172,7 @@ export default function TailoringLab() {
         setPhase('questioning')
       }
     } catch (err) {
+      if (err instanceof PlanLimitError) { setLimitReached(true); setPhase('idle'); return }
       if (err.name === 'AbortError') { setPhase('idle'); return }
       console.error('[TailoringLab] Analysis error:', err)
       await generate() // fall back to direct generation
@@ -1187,7 +1191,7 @@ export default function TailoringLab() {
 
     let fullText = ''
     try {
-      const res = await fetch('/api/tailoring', {
+      const res = await apiFetch('/api/tailoring', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
@@ -1232,6 +1236,7 @@ export default function TailoringLab() {
       // Auto-save draft
       await persistDraft(parsed.cv, parsed.cover)
     } catch (err) {
+      if (err instanceof PlanLimitError) { setLimitReached(true); setPhase('idle'); setStreamText(''); return }
       if (err.name === 'AbortError') {
         // Stream was aborted (tab switch / navigate away). Reset to idle so
         // the restored state (from localStorage) drives the UI, not 'generating'.
@@ -1333,7 +1338,7 @@ export default function TailoringLab() {
         ? `\n\nTarget job: ${activeJob.title} at ${activeJob.company}${activeJob.description ? `\nJob description (excerpt): ${activeJob.description.slice(0, 1500)}` : ''}`
         : ''
 
-      const res = await fetch('/api/tailoring', {
+      const res = await apiFetch('/api/tailoring', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1377,8 +1382,8 @@ Then output one short sentence (max 15 words) describing what you changed, start
 
       setAlexBanner({ text: alexMsg, prevCv, prevCover })
     } catch (err) {
-      console.error('[Alex edit]', err)
-      setAlexBanner({ text: 'Something went wrong. Please try again.', prevCv: null, prevCover: null })
+      if (err instanceof PlanLimitError) { setLimitReached(true) }
+      else { console.error('[Alex edit]', err); setAlexBanner({ text: 'Something went wrong. Please try again.', prevCv: null, prevCover: null }) }
     } finally {
       setAlexLoading(false)
       setAlexAgentStatus(null)
@@ -1414,6 +1419,7 @@ Then output one short sentence (max 15 words) describing what you changed, start
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="p-4 md:p-8 page-fade-in flex flex-col h-full md:overflow-hidden">
+      <LimitReachedModal isOpen={limitReached} onClose={() => setLimitReached(false)} />
       {/* Template selector modal */}
       {templateModal && (
         <TemplateModal

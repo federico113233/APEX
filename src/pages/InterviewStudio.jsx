@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useUser } from '../context/UserContext'
+import { apiFetch, PlanLimitError } from '../lib/apiFetch'
+import LimitReachedModal from '../components/LimitReachedModal'
 import posthog from 'posthog-js'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -147,6 +149,7 @@ export default function InterviewStudio() {
   // ── Feedback state ──
   const [report, setReport] = useState(null)
   const [feedbackError, setFeedbackError] = useState(null)
+  const [limitReached, setLimitReached] = useState(false)
 
   // ── Refs (voice engine) ──
   const contextRef = useRef(null)
@@ -410,7 +413,7 @@ export default function InterviewStudio() {
     const prepCtrl = new AbortController()
     const prepTimeout = setTimeout(() => prepCtrl.abort(), 30_000)
     try {
-      const res = await fetch('/api/interview', {
+      const res = await apiFetch('/api/interview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: prepCtrl.signal,
@@ -418,6 +421,7 @@ export default function InterviewStudio() {
       })
       if (res.ok) research = (await res.json()).research || ''
     } catch (err) {
+      if (err instanceof PlanLimitError) { setLimitReached(true); setPhase('setup'); return }
       console.warn('[InterviewStudio] prep skipped:', err.name)
     } finally {
       clearTimeout(prepTimeout)
@@ -497,7 +501,7 @@ export default function InterviewStudio() {
     abortRef.current = controller
 
     try {
-      const res = await fetch('/api/interview', {
+      const res = await apiFetch('/api/interview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
@@ -611,7 +615,7 @@ export default function InterviewStudio() {
     const fbCtrl = new AbortController()
     const fbTimeout = setTimeout(() => fbCtrl.abort(), 90_000)
     try {
-      const res = await fetch('/api/interview', {
+      const res = await apiFetch('/api/interview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: fbCtrl.signal,
@@ -667,6 +671,7 @@ export default function InterviewStudio() {
 
   return (
     <div className="h-full flex flex-col md:overflow-hidden page-fade-in">
+      <LimitReachedModal isOpen={limitReached} onClose={() => setLimitReached(false)} />
       <style>{`
         @keyframes studio-ring { 0%,100% { transform: scale(1); opacity: .35 } 50% { transform: scale(1.14); opacity: .08 } }
         @keyframes studio-breathe { 0%,100% { transform: scale(1) } 50% { transform: scale(1.045) } }

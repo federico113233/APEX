@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useUser } from '../context/UserContext'
+import { apiFetch, PlanLimitError } from '../lib/apiFetch'
+import LimitReachedModal from './LimitReachedModal'
 
 async function* parseSSE(response) {
   const reader = response.body.getReader()
@@ -133,6 +135,7 @@ export default function AlexChat() {
   const [streaming, setStreaming] = useState(false)
   const [input, setInput] = useState('')
   const [trackerToast, setTrackerToast] = useState(null)
+  const [limitReached, setLimitReached] = useState(false)
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
   const abortRef = useRef(null)
@@ -186,7 +189,7 @@ export default function AlexChat() {
       const controller = new AbortController()
       abortRef.current = controller
 
-      const res = await fetch('/api/alexchat', {
+      const res = await apiFetch('/api/alexchat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
@@ -226,7 +229,10 @@ export default function AlexChat() {
         ]
       }
     } catch (err) {
-      if (err.name !== 'AbortError') {
+      if (err instanceof PlanLimitError) {
+        setMessages((prev) => prev.filter((m) => m.id !== alexId))
+        setLimitReached(true)
+      } else if (err.name !== 'AbortError') {
         console.error('[AlexChat] API error:', err)
         setMessages((prev) =>
           prev.map((m) =>
@@ -249,6 +255,7 @@ export default function AlexChat() {
 
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
+      <LimitReachedModal isOpen={limitReached} onClose={() => setLimitReached(false)} />
       {/* Tracker update toast */}
       {trackerToast && (
         <div

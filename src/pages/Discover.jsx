@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../context/UserContext'
 import { supabase } from '../lib/supabase'
+import { apiFetch, PlanLimitError } from '../lib/apiFetch'
+import LimitReachedModal from '../components/LimitReachedModal'
 import AddJobModal from '../components/AddJobModal'
 import posthog from 'posthog-js'
 
@@ -950,6 +952,7 @@ export default function Discover() {
   // ── Inbox state ─────────────────────────────────────────────────────────────
   const [inboxJobs, setInboxJobs]         = useState([])
   const [inboxLoading, setInboxLoading]   = useState(true)
+  const [limitReached, setLimitReached]   = useState(false)
 
   // ── Import bar state ────────────────────────────────────────────────────────
   const [importBarUrl, setImportBarUrl]           = useState('')
@@ -1122,7 +1125,7 @@ export default function Discover() {
 
       const userProfile = buildUserProfileString(profile)
 
-      const res = await fetch('/api/score-job', {
+      const res = await apiFetch('/api/score-job', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1149,6 +1152,7 @@ export default function Discover() {
       ))
 
     } catch (err) {
+      if (err instanceof PlanLimitError) { setLimitReached(true); return }
       console.error('[scoring] caught error:', err)
     }
   }
@@ -1160,7 +1164,7 @@ export default function Discover() {
     setImportStartTime(Date.now())
     setImportBarError('')
     try {
-      const res = await fetch('/api/import-job', {
+      const res = await apiFetch('/api/import-job', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: importBarUrl.trim() }),
@@ -1195,8 +1199,9 @@ export default function Discover() {
 
       // Score in background — non-blocking
       scoreJobInBackground(inserted)
-    } catch {
-      setImportBarError('Could not read this page. Try adding manually.')
+    } catch (err) {
+      if (err instanceof PlanLimitError) { setLimitReached(true) }
+      else { setImportBarError('Could not read this page. Try adding manually.') }
     } finally {
       setImportBarLoading(false)
       setImportStartTime(null)
@@ -1314,6 +1319,7 @@ export default function Discover() {
 
   return (
     <>
+      <LimitReachedModal isOpen={limitReached} onClose={() => setLimitReached(false)} />
       {/* ── Main page ── */}
       <div className="p-4 md:p-8 page-fade-in h-full overflow-y-auto">
 

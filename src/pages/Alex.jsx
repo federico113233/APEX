@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useMemo, memo } from 'react'
 import { useUser } from '../context/UserContext'
 import { supabase } from '../lib/supabase'
+import { apiFetch, PlanLimitError } from '../lib/apiFetch'
+import LimitReachedModal from '../components/LimitReachedModal'
 import posthog from 'posthog-js'
 
 // ─── State persistence ────────────────────────────────────────────────────────
@@ -117,7 +119,7 @@ async function streamAlex({ messages, systemPrompt, onChunk, onDone, onError, on
   if (abortRef) abortRef.current = controller
 
   try {
-    const res = await fetch('/api/alex', {
+    const res = await apiFetch('/api/alex', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,
@@ -780,6 +782,7 @@ export default function Alex() {
   const [streamText, setStreamText]   = useState('')
   const [agentActivity, setAgentActivity] = useState(null) // { agent, company?, docType? } while a sub-agent runs
   const [hasStarted, setHasStarted]   = useState(false)
+  const [limitReached, setLimitReached] = useState(false)
   const abortRef        = useRef(null)
   const chatEndRef      = useRef(null)
   const msgsContainerRef = useRef(null)
@@ -953,7 +956,8 @@ export default function Alex() {
         setAgentActivity(null)
         await saveConversation(full)
       },
-      onError: () => {
+      onError: (err) => {
+        if (err instanceof PlanLimitError) { setLimitReached(true); setStreamText(''); setStreaming(false); setAgentActivity(null); return }
         setDisplayMsgs(prev => [...prev, {
           role: 'assistant',
           text: 'Something went wrong. Please check your connection and try again.',
@@ -983,6 +987,7 @@ export default function Alex() {
 
   return (
     <>
+      <LimitReachedModal isOpen={limitReached} onClose={() => setLimitReached(false)} />
       <style>{`
         @keyframes alex-bounce {
           0%, 100% { transform: translateY(0); opacity: 0.4; }

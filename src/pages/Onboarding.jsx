@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Logo from '../components/Logo'
 import CvUploader from '../components/CvUploader'
+import CvBuilder from '../components/CvBuilder'
 import PillGroup from '../components/PillGroup'
 import { useUser } from '../context/UserContext'
+import posthog from 'posthog-js'
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -68,6 +70,28 @@ function Field({ label, hint, children }) {
       </label>
       {children}
     </div>
+  )
+}
+
+// ── CV path chooser card ────────────────────────────────────────────────────
+
+function PathCard({ title, desc, iconPath, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full flex items-start gap-3 text-left p-4 rounded-xl border border-slate-200 bg-white hover:border-apex-blue hover:bg-blue-50/40 transition-colors"
+    >
+      <span className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+        <svg className="w-5 h-5 text-apex-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d={iconPath} />
+        </svg>
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold text-apex-text">{title}</span>
+        <span className="block text-xs text-apex-muted mt-0.5 leading-relaxed">{desc}</span>
+      </span>
+    </button>
   )
 }
 
@@ -136,6 +160,8 @@ export default function Onboarding() {
   }, [user.onboarded, navigate])
 
   const [step, setStep] = useState(1)
+  // Which way the user chose to provide a CV: 'have' | 'linkedin' | 'build' | null (not chosen yet)
+  const [cvPath, setCvPath] = useState(null)
 
   // All form state in one object so it persists across steps
   const [form, setForm] = useState({
@@ -162,7 +188,9 @@ export default function Onboarding() {
   const inputCls =
     'w-full px-4 py-3 rounded-lg border border-slate-200 text-slate-900 placeholder-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow text-base'
 
-  const handleFinish = async () => {
+  // `skipCv` finishes onboarding without a CV (it can be added later in Profile)
+  const handleFinish = async ({ skipCv = false } = {}) => {
+    const cvText = skipCv ? '' : form.cvText
     await updateProfile({
       name:           form.name,
       country:        form.country,
@@ -176,10 +204,16 @@ export default function Onboarding() {
       salaryMin:      form.salaryMin,
       salaryMax:      form.salaryMax,
       languages:      form.languages,
-      cvText:         form.cvText,
+      cvText,
       onboarded:      true,
     })
+    posthog.capture('onboarding_completed', { cv_path: skipCv || !cvText.trim() ? 'skipped' : cvPath })
     navigate('/dashboard')
+  }
+
+  const chooseCvPath = (path) => {
+    setCvPath(path)
+    posthog.capture('onboarding_cv_path_chosen', { cv_path: path })
   }
 
   const canContinue = {
@@ -334,11 +368,75 @@ export default function Onboarding() {
 
     4: (
       <>
-        <h1 className="text-2xl font-semibold text-apex-text mb-1">Add your CV</h1>
-        <p className="text-apex-muted text-sm mb-6">
-          Upload a PDF or Word file, or paste the text. Alex and the Tailoring Lab will use it to personalise everything.
-        </p>
-        <CvUploader value={form.cvText} onChange={(v) => set('cvText', v)} compact />
+        <h1 className="text-2xl font-semibold text-apex-text mb-1">Your CV</h1>
+
+        {!cvPath && (
+          <>
+            <p className="text-apex-muted text-sm mb-6">
+              Alex and the Tailoring Lab use it to personalise everything. How do you want to start?
+            </p>
+            <div className="space-y-3">
+              <PathCard
+                title="I have a CV"
+                desc="Upload a PDF or Word file, or paste the text."
+                iconPath="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                onClick={() => chooseCvPath('have')}
+              />
+              <PathCard
+                title="I have a LinkedIn profile"
+                desc="Download your profile as a PDF and we’ll read it. Takes 30 seconds."
+                iconPath="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                onClick={() => chooseCvPath('linkedin')}
+              />
+              <PathCard
+                title="I don’t have a CV yet"
+                desc="Answer a few questions and we’ll write one for you. No blank page."
+                iconPath="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+                onClick={() => chooseCvPath('build')}
+              />
+            </div>
+          </>
+        )}
+
+        {cvPath && (
+          <button
+            type="button"
+            onClick={() => setCvPath(null)}
+            className="text-xs text-apex-muted hover:text-apex-text underline underline-offset-2 mb-5"
+          >
+            ← Choose another way
+          </button>
+        )}
+
+        {cvPath === 'have' && (
+          <>
+            <p className="text-apex-muted text-sm mb-4">
+              Upload a PDF or Word file, or paste the text.
+            </p>
+            <CvUploader value={form.cvText} onChange={(v) => set('cvText', v)} compact />
+          </>
+        )}
+
+        {cvPath === 'linkedin' && (
+          <>
+            <ol className="text-sm text-apex-text space-y-1.5 mb-4 list-decimal list-inside bg-slate-50 rounded-lg px-4 py-3 border border-slate-100">
+              <li>Open your profile on LinkedIn</li>
+              <li>Click <span className="font-medium">Resources</span> (or <span className="font-medium">More</span>) below your name</li>
+              <li>Choose <span className="font-medium">Save to PDF</span></li>
+              <li>Upload that PDF here</li>
+            </ol>
+            <CvUploader value={form.cvText} onChange={(v) => set('cvText', v)} compact />
+          </>
+        )}
+
+        {cvPath === 'build' && (
+          <>
+            <p className="text-apex-muted text-sm mb-4">
+              We’ll turn your answers into a clean, one-page CV.
+            </p>
+            <CvBuilder profile={form} value={form.cvText} onChange={(v) => set('cvText', v)} />
+          </>
+        )}
       </>
     ),
   }
@@ -388,7 +486,7 @@ export default function Onboarding() {
                 <button
                   type="button"
                   disabled={!canContinue[4]}
-                  onClick={handleFinish}
+                  onClick={() => handleFinish()}
                   className="flex-1 py-3 rounded-lg font-semibold text-white text-sm hover:opacity-90 transition-opacity disabled:opacity-40 shadow-md shadow-blue-500/20"
                   style={{ background: 'linear-gradient(135deg, #2563EB, #38BDF8)' }}
                 >
@@ -402,7 +500,7 @@ export default function Onboarding() {
               <p className="hidden md:block text-center mt-3">
                 <button
                   type="button"
-                  onClick={async () => { set('cvText', ' '); await handleFinish() }}
+                  onClick={() => handleFinish({ skipCv: true })}
                   className="text-sm text-apex-muted hover:text-apex-text underline underline-offset-2"
                 >
                   Skip for now — I'll add it later in Profile
@@ -442,7 +540,7 @@ export default function Onboarding() {
             <button
               type="button"
               disabled={!canContinue[4]}
-              onClick={handleFinish}
+              onClick={() => handleFinish()}
               className="flex-1 py-3.5 rounded-xl font-semibold text-white text-sm hover:opacity-90 transition-opacity disabled:opacity-40 min-h-[48px]"
               style={{ background: 'linear-gradient(135deg, #2563EB, #38BDF8)' }}
             >
@@ -454,7 +552,7 @@ export default function Onboarding() {
           <p className="text-center mt-2 pb-1">
             <button
               type="button"
-              onClick={async () => { set('cvText', ' '); await handleFinish() }}
+              onClick={() => handleFinish({ skipCv: true })}
               className="text-sm text-apex-muted hover:text-apex-text underline underline-offset-2"
             >
               Skip for now

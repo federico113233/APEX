@@ -9,6 +9,7 @@ export const FREE_LIMITS = {
   alex:         20,
   'score-job':  50,
   'import-job': 20,
+  'build-cv':    5,
 }
 
 let _adminClient = null

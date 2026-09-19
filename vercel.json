@@ -1,4 +1,7 @@
 {
+  "functions": {
+    "api/import-job.js": { "maxDuration": 60 }
+  },
   "rewrites": [
     { "source": "/api/adzuna/(.*)", "destination": "/api/adzuna" },
     { "source": "/(.*)", "destination": "/index.html" }

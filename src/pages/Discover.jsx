@@ -958,6 +958,8 @@ export default function Discover() {
   const [importBarUrl, setImportBarUrl]           = useState('')
   const [importBarLoading, setImportBarLoading]   = useState(false)
   const [importBarError, setImportBarError]       = useState('')
+  const [importNeedsPaste, setImportNeedsPaste]   = useState(false)
+  const [importPasteText, setImportPasteText]     = useState('')
   const [importBarFocused, setImportBarFocused]   = useState(false)
   const [newJobId, setNewJobId]                   = useState(null)
   const [importStartTime, setImportStartTime]     = useState(null)
@@ -1138,7 +1140,7 @@ export default function Discover() {
 
       const { score, report } = await res.json()
 
-      if (score === null) return
+      if (score === null || score === undefined) return
 
       await supabase
         .from('job_inbox')
@@ -1154,12 +1156,17 @@ export default function Discover() {
     } catch (err) {
       if (err instanceof PlanLimitError) { setLimitReached(true); return }
       console.error('[scoring] caught error:', err)
+    } finally {
+      // Always stop the "Analyzing…" badge, even when scoring failed or returned nothing
+      setInboxJobs(prev => prev.map(j => j.id === job.id ? { ...j, _scoring: false } : j))
     }
   }
 
   // ── Import bar handler ──────────────────────────────────────────────────────
-  const handleInlineImport = async () => {
-    if (!importBarUrl.trim() || !session?.user?.id) return
+  // `pasted` is set when the user pastes the posting text after automatic reading failed
+  const handleInlineImport = async (pasted) => {
+    const pastedText = typeof pasted === 'string' ? pasted.trim() : ''
+    if ((!importBarUrl.trim() && !pastedText) || !session?.user?.id) return
     setImportBarLoading(true)
     setImportStartTime(Date.now())
     setImportBarError('')
@@ -1167,10 +1174,25 @@ export default function Discover() {
       const res = await apiFetch('/api/import-job', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: importBarUrl.trim() }),
+        body: JSON.stringify(pastedText
+          ? { text: pastedText, url: importBarUrl.trim() }
+          : { url: importBarUrl.trim() }),
       })
       const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Failed')
+      if (!res.ok || data.error) {
+        const err = new Error(data.error || 'Failed')
+        err.code = data.code
+        throw err
+      }
+      // Never save a job without a title: the server already validates, this is a safety net
+      if (!data.title?.trim()) {
+        const err = new Error('Empty result')
+        err.code = 'needs_paste'
+        throw err
+      }
+
+      setImportNeedsPaste(false)
+      setImportPasteText('')
 
       const { data: inserted, error: dbErr } = await supabase
         .from('job_inbox')
@@ -1201,7 +1223,15 @@ export default function Discover() {
       scoreJobInBackground(inserted)
     } catch (err) {
       if (err instanceof PlanLimitError) { setLimitReached(true) }
-      else { setImportBarError('Could not read this page. Try adding manually.') }
+      else if (err.code === 'needs_paste' || err.code === 'text_too_short') {
+        // Automatic reading failed (login wall, bot protection…): ask for the text instead
+        setImportNeedsPaste(true)
+        setImportBarError(pastedText
+          ? "That doesn't look like a full job posting. Paste the whole description."
+          : "This site blocks automatic reading. Paste the job description below and we'll take it from there.")
+      }
+      else if (err.code === 'invalid_url') { setImportBarError('That link does not look valid.') }
+      else { setImportBarError('Something went wrong. Try again, or paste the job description instead.'); setImportNeedsPaste(true) }
     } finally {
       setImportBarLoading(false)
       setImportStartTime(null)
@@ -1446,6 +1476,47 @@ export default function Discover() {
           </div>
           {importBarError && (
             <p className="text-[11px] text-red-500 mt-1 px-1">{importBarError}</p>
+          )}
+
+          {importNeedsPaste && (
+            <div style={{
+              marginTop: 10, background: '#fff', border: '1px solid #E2E8F0',
+              borderRadius: 14, padding: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+            }}>
+              <textarea
+                value={importPasteText}
+                onChange={e => setImportPasteText(e.target.value)}
+                disabled={importBarLoading}
+                rows={6}
+                placeholder="Open the job page, select everything (Ctrl+A), copy it and paste it here. Extra text around the posting is fine."
+                style={{
+                  width: '100%', resize: 'vertical', border: '1px solid #E2E8F0', borderRadius: 10,
+                  padding: '10px 12px', fontSize: 13, color: '#0F172A', outline: 'none',
+                  fontFamily: 'inherit', boxSizing: 'border-box',
+                }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+                <button
+                  onClick={() => { setImportNeedsPaste(false); setImportPasteText(''); setImportBarError('') }}
+                  disabled={importBarLoading}
+                  style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', color: '#475569', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleInlineImport(importPasteText)}
+                  disabled={importBarLoading || importPasteText.trim().length < 80}
+                  style={{
+                    padding: '7px 16px', borderRadius: 8, border: 'none',
+                    background: 'linear-gradient(135deg, #2563EB, #38BDF8)', color: '#fff',
+                    fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    opacity: (importBarLoading || importPasteText.trim().length < 80) ? 0.5 : 1,
+                  }}
+                >
+                  {importBarLoading ? 'Importing…' : 'Import from text'}
+                </button>
+              </div>
+            </div>
           )}
         </div>
 

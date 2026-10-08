@@ -100,7 +100,9 @@ async function* parseSSE(response) {
   }
 }
 
-function buildUserMessage(user, job, answers = {}) {
+const LANG_NAMES = { it: 'Italian', en: 'English', fr: 'French', de: 'German', es: 'Spanish' }
+
+function buildUserMessage(user, job, answers = {}, language = 'auto') {
   const sectors = user.sectors?.length ? user.sectors : user.sector ? [user.sector] : []
   const langs = user.languages?.filter((l) => l.lang).map((l) => `${l.lang} (${l.level})`).join(', ')
   const salary = (user.salaryMin || user.salaryMax)
@@ -131,6 +133,11 @@ ${job.description || 'Not provided'}`
   }
 
   msg += `\nPlease tailor the CV and write the cover letter following your output format exactly.`
+
+  if (language !== 'auto') {
+    msg += `\n\nMANDATORY LANGUAGE INSTRUCTION: Write ALL outputs (tailored CV, cover letter, changelog) entirely and exclusively in ${LANG_NAMES[language]}. This overrides any other language rule, including auto-detection from the job description.`
+  }
+
   return msg
 }
 
@@ -632,6 +639,37 @@ function AlexBubble({ children }) {
   )
 }
 
+const LANG_OPTIONS = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'it',   label: 'IT' },
+  { value: 'en',   label: 'EN' },
+  { value: 'fr',   label: 'FR' },
+  { value: 'de',   label: 'DE' },
+  { value: 'es',   label: 'ES' },
+]
+
+function LanguagePicker({ value, onChange, label = true }) {
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {label && <span className="text-xs text-slate-400 font-medium">Language:</span>}
+      {LANG_OPTIONS.map(({ value: v, label: l }) => (
+        <button
+          key={v}
+          onClick={() => onChange(v)}
+          title={v === 'auto' ? 'Detect from job description' : LANG_NAMES[v]}
+          className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
+            value === v
+              ? 'bg-apex-blue text-white border-apex-blue shadow-sm'
+              : 'border-slate-200 text-slate-500 bg-white hover:border-apex-blue/60 hover:text-apex-blue'
+          }`}
+        >
+          {l}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function LoadingCard({ streamText }) {
   return (
     <div className="flex-1 bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col">
@@ -1012,6 +1050,10 @@ export default function TailoringLab() {
   const [alexExpanded, setAlexExpanded]   = useState(false)
   const [changelog, setChangelog]         = useState([])   // [{ type, text }]
   const [changelogOpen, setChangelogOpen] = useState(false)
+  const [selectedLanguage, setSelectedLanguage] = useState(() => {
+    try { return localStorage.getItem('apex_lang_pref') || 'auto' }
+    catch { return 'auto' }
+  })
   const ALEX_PILLS = ['Make it more concise', 'Add more impact', 'Match keywords better', 'Adjust tone']
 
   // Accordion height for job description
@@ -1019,7 +1061,7 @@ export default function TailoringLab() {
   const [descHeight, setDescHeight]     = useState(0)
   useLayoutEffect(() => {
     if (!descInnerRef.current) return
-    setDescHeight(descExpanded ? descInnerRef.current.scrollHeight : 0)
+    setDescHeight(descExpanded ? Math.min(descInnerRef.current.scrollHeight, 160) : 0)
   }, [descExpanded])
 
   // ── State persistence ──────────────────────────────────────────────────────
@@ -1034,6 +1076,12 @@ export default function TailoringLab() {
       localStorage.setItem('apex_lab_state', JSON.stringify({ ...saved, activeDocTab }))
     } catch {}
   }, [activeDocTab])
+
+  // Persist language preference independently of per-job state
+  useEffect(() => {
+    try { localStorage.setItem('apex_lang_pref', selectedLanguage) }
+    catch {}
+  }, [selectedLanguage])
 
   // Save activeJob, tailoredCV, coverLetter, questions (debounced)
   const labSaveTimerRef = useRef(null)
@@ -1090,20 +1138,7 @@ export default function TailoringLab() {
     }, 200)
   }, [])
 
-  // ── Auto-start analysis on fresh Discover navigation ──────────────────────
-  useEffect(() => {
-    // Only auto-start when job was passed fresh from Discover (location.state?.job).
-    // On localStorage restore (no location.state), skip — UI already shows correct phase.
-    if (!activeJob || tailoredCV) return
-    if (!location.state?.job) return
-    let cancelled = false
-    const run = async () => { if (!cancelled) await startFlow() }
-    run()
-    return () => {
-      cancelled = true
-      abortRef.current?.abort?.()
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Auto-start removed: user always sees the idle state with the language picker first.
 
   // ── Persist Q&A session ────────────────────────────────────────────────────
   const persistAnswers = async (currentAnswers) => {
@@ -1196,7 +1231,7 @@ export default function TailoringLab() {
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
         body: JSON.stringify({
-          messages: [{ role: 'user', content: buildUserMessage(user, activeJob, currentAnswers) }],
+          messages: [{ role: 'user', content: buildUserMessage(user, activeJob, currentAnswers, selectedLanguage) }],
           systemPrompt: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
           stream: true,
           maxTokens: 4096,
@@ -1552,175 +1587,198 @@ Then output one short sentence (max 15 words) describing what you changed, start
               </div>
 
               {/* ─ LEFT COLUMN — desktop only ─────────────────────────────── */}
-              <div className="hidden md:flex w-80 flex-shrink-0 flex-col gap-4 overflow-y-auto h-full">
+              <div className="hidden md:flex w-[272px] flex-shrink-0 flex-col min-h-0 h-full">
+                <div className="flex flex-col flex-1 min-h-0 bg-white rounded-xl border border-slate-200 overflow-hidden">
 
-                {/* Job info card */}
-                <div className="bg-white rounded-xl border border-slate-200 p-5">
-                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-apex-blue bg-blue-50 px-2.5 py-1 rounded-full mb-3">
-                    ✦ Selected job
-                  </span>
-                  <h2 className="font-bold text-slate-900 text-base leading-snug">{activeJob.title}</h2>
-                  <p className="text-sm text-slate-500 mt-1">
-                    {[activeJob.company, activeJob.location].filter(Boolean).join(' · ')}
-                  </p>
+                  {/* Scrollable top: job info + Ask Alex */}
+                  <div className="flex-1 min-h-0 overflow-y-auto">
 
-                  {/* Collapsible description */}
-                  {activeJob.description && (
-                    <div className="mt-3">
-                      <button
-                        onClick={() => setDescExpanded(v => !v)}
-                        className="flex items-center gap-1.5 text-xs font-medium text-apex-blue hover:opacity-80 transition-opacity"
-                      >
-                        <svg
-                          className={`w-3.5 h-3.5 transition-transform duration-300 ${descExpanded ? 'rotate-180' : ''}`}
-                          fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                        {descExpanded ? 'Hide description' : 'View full description'}
-                      </button>
-                      <div style={{ height: descHeight, overflow: 'hidden', transition: 'height 300ms ease' }}>
-                        <div ref={descInnerRef}>
-                          <p className="text-xs text-slate-500 leading-relaxed mt-2 whitespace-pre-line">
-                            {activeJob.description}
-                          </p>
-                          {activeJob.url && (
-                            <a href={activeJob.url} target="_blank" rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 mt-2 text-xs text-apex-blue hover:underline">
-                              View listing ↗
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="mt-4 pt-3 border-t border-slate-100 flex gap-2">
-                    {activeJob.url && !activeJob.description && (
-                      <a href={activeJob.url} target="_blank" rel="noopener noreferrer"
-                        className="text-xs text-slate-500 border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors">
-                        View listing ↗
-                      </a>
-                    )}
-                    <button onClick={handleChangeJob}
-                      className="text-xs text-slate-400 hover:text-apex-text transition-colors">
-                      Change job
-                    </button>
-                  </div>
-                </div>
-
-                {/* ── Ask Alex to edit ── */}
-                {phase === 'done' && (tailoredCV || coverLetter) && (
-                  <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                    {/* Divider header */}
-                    <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0"
-                        style={{ background: 'linear-gradient(135deg,#2563EB,#38BDF8)' }}>
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="white">
-                          <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" />
-                        </svg>
-                      </div>
-                      <span className="text-xs font-semibold text-slate-700">Ask Alex to edit</span>
-                      <span className="text-xs text-slate-400 ml-0.5">
-                        · {activeDocTab === 'cv' ? 'Tailored CV' : 'Cover Letter'}
-                      </span>
-                    </div>
-
-                    {/* Alex response banner */}
-                    {alexBanner && (
-                      <div style={{
-                        margin: '12px 12px 0',
-                        padding: '10px 14px',
-                        borderRadius: 10,
-                        background: '#EFF6FF',
-                        border: '1px solid #DBEAFE',
-                        display: 'flex', alignItems: 'center', gap: 8,
-                      }}>
-                        <svg width="14" height="14" fill="none" stroke="#2563EB" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                        </svg>
-                        <span style={{ fontSize: 12, color: '#1D4ED8', flex: 1, lineHeight: 1.4 }}>{alexBanner.text}</span>
-                        {alexBanner.prevCv !== null || alexBanner.prevCover !== null ? (
-                          <button
-                            onClick={handleAlexUndo}
-                            style={{ fontSize: 11, fontWeight: 600, color: '#64748B', background: 'none', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap', padding: '2px 6px', borderRadius: 6 }}
-                            onMouseEnter={e => e.currentTarget.style.background = '#E2E8F0'}
-                            onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                          >
-                            Undo
-                          </button>
-                        ) : null}
-                      </div>
-                    )}
-
-                    {/* Sub-agent activity */}
-                    {alexLoading && alexAgentStatus && (
-                      <div style={{
-                        margin: '12px 12px 0',
-                        padding: '8px 14px',
-                        borderRadius: 10,
-                        background: '#EFF6FF',
-                        border: '1px solid #BFDBFE',
-                        display: 'flex', alignItems: 'center', gap: 8,
-                      }}>
-                        <span className="inline-block w-3 h-3 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin flex-shrink-0" />
-                        <span style={{ fontSize: 12, color: '#1D4ED8', fontWeight: 500 }}>{alexAgentStatus}</span>
-                      </div>
-                    )}
-
-                    <div className="p-3 space-y-2.5">
-                      {/* Quick pills */}
-                      <div className="flex flex-wrap gap-1.5">
-                        {ALEX_PILLS.map(pill => (
-                          <button
-                            key={pill}
-                            onClick={() => handleAlexEdit(pill)}
-                            disabled={alexLoading}
-                            className="px-2.5 py-1 rounded-full text-xs font-medium border border-blue-200 text-blue-600 bg-white hover:bg-blue-50 transition-colors disabled:opacity-50"
-                          >
-                            {pill}
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Free text input */}
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={alexInput}
-                          onChange={e => setAlexInput(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter') handleAlexEdit() }}
-                          placeholder="Or type your request…"
-                          disabled={alexLoading}
-                          className="flex-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-apex-blue focus:border-transparent transition-shadow disabled:opacity-50"
-                        />
-                        <button
-                          onClick={() => handleAlexEdit()}
-                          disabled={!alexInput.trim() || alexLoading}
-                          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50 transition-opacity"
-                          style={{ background: 'linear-gradient(135deg,#2563EB,#38BDF8)' }}
-                        >
-                          {alexLoading ? (
-                            <span className="inline-block w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" />
-                          ) : 'Send'}
+                    {/* Job info */}
+                    <div className="px-5 pt-4 pb-4">
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-apex-blue bg-blue-50 px-2 py-0.5 rounded-full uppercase tracking-wide flex-shrink-0">
+                          Active job
+                        </span>
+                        <button onClick={handleChangeJob}
+                          className="text-[11px] text-slate-400 hover:text-slate-600 transition-colors flex-shrink-0 mt-0.5">
+                          Change
                         </button>
                       </div>
-                    </div>
-                  </div>
-                )}
+                      <h2 className="font-semibold text-slate-900 text-[13px] leading-snug">{activeJob.title}</h2>
+                      <p className="text-xs text-slate-400 mt-0.5 leading-snug">
+                        {[activeJob.company, activeJob.location].filter(Boolean).join(' · ')}
+                      </p>
 
-                {/* Regenerate button */}
-                {phase === 'done' && (
-                  <button
-                    onClick={handleRegenerate}
-                    className="w-full py-2.5 rounded-xl text-sm font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all flex items-center justify-center gap-2"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    Regenerate
-                  </button>
-                )}
+                      {activeJob.description && (
+                        <div className="mt-3">
+                          <button
+                            onClick={() => setDescExpanded(v => !v)}
+                            className="flex items-center gap-1 text-[11px] font-medium text-slate-400 hover:text-apex-blue transition-colors"
+                          >
+                            <svg
+                              className={`w-3 h-3 transition-transform duration-200 ${descExpanded ? 'rotate-180' : ''}`}
+                              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                            {descExpanded ? 'Hide' : 'Job description'}
+                          </button>
+                          <div style={{ height: descHeight, overflow: 'hidden', transition: 'height 260ms ease' }}>
+                            <div ref={descInnerRef} className="overflow-y-auto" style={{ maxHeight: 160 }}>
+                              <p className="text-[11px] text-slate-500 leading-relaxed mt-2 whitespace-pre-line pr-1">
+                                {activeJob.description}
+                              </p>
+                              {activeJob.url && (
+                                <a href={activeJob.url} target="_blank" rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 mt-1 text-[11px] text-apex-blue hover:underline">
+                                  View listing ↗
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {activeJob.url && !activeJob.description && (
+                        <a href={activeJob.url} target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 mt-2 text-[11px] text-apex-blue hover:underline">
+                          View listing ↗
+                        </a>
+                      )}
+                    </div>
+
+                    {/* ── Ask Alex to edit ── */}
+                    {phase === 'done' && (tailoredCV || coverLetter) && (
+                      <>
+                        <div className="border-t border-slate-100" />
+                        <div className="px-4 pt-3 pb-4">
+
+                          {/* Header */}
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0"
+                              style={{ background: 'linear-gradient(135deg,#2563EB,#38BDF8)' }}>
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="white">
+                                <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" />
+                              </svg>
+                            </div>
+                            <span className="text-xs font-semibold text-slate-700">Ask Alex</span>
+                            <span className="text-xs text-slate-400">
+                              · {activeDocTab === 'cv' ? 'CV' : 'Cover Letter'}
+                            </span>
+                          </div>
+
+                          {/* Alex response banner */}
+                          {alexBanner && (
+                            <div className="mb-3 px-3 py-2.5 rounded-lg bg-blue-50 border border-blue-100 flex items-center gap-2">
+                              <svg width="12" height="12" fill="none" stroke="#2563EB" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span className="text-[11.5px] text-blue-700 flex-1 leading-snug">{alexBanner.text}</span>
+                              {(alexBanner.prevCv !== null || alexBanner.prevCover !== null) && (
+                                <button
+                                  onClick={handleAlexUndo}
+                                  className="text-[11px] font-semibold text-slate-400 hover:text-slate-600 transition-colors px-1.5 py-0.5 rounded hover:bg-white/60 flex-shrink-0"
+                                >
+                                  Undo
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Sub-agent activity */}
+                          {alexLoading && alexAgentStatus && (
+                            <div className="mb-3 px-3 py-2 rounded-lg bg-blue-50 border border-blue-100 flex items-center gap-2">
+                              <span className="inline-block w-3 h-3 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin flex-shrink-0" />
+                              <span className="text-[11.5px] text-blue-700 font-medium">{alexAgentStatus}</span>
+                            </div>
+                          )}
+
+                          {/* Quick pills */}
+                          <div className="flex flex-wrap gap-1.5 mb-2.5">
+                            {ALEX_PILLS.map(pill => (
+                              <button
+                                key={pill}
+                                onClick={() => handleAlexEdit(pill)}
+                                disabled={alexLoading}
+                                className="px-2.5 py-1 rounded-full text-[11px] font-medium border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 hover:border-slate-300 transition-all disabled:opacity-40"
+                              >
+                                {pill}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Free text input */}
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={alexInput}
+                              onChange={e => setAlexInput(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') handleAlexEdit() }}
+                              placeholder="Describe your edit…"
+                              disabled={alexLoading}
+                              className="flex-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-apex-blue/20 focus:border-apex-blue/50 transition-all disabled:opacity-50 bg-slate-50/50"
+                            />
+                            <button
+                              onClick={() => handleAlexEdit()}
+                              disabled={!alexInput.trim() || alexLoading}
+                              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-40 transition-opacity flex-shrink-0"
+                              style={{ background: 'linear-gradient(135deg,#2563EB,#38BDF8)' }}
+                            >
+                              {alexLoading
+                                ? <span className="inline-block w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" />
+                                : 'Send'}
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* ── Pinned bottom: Language + Action ── */}
+                  <div className="flex-shrink-0 border-t border-slate-100 px-4 py-4 space-y-3">
+                    <div>
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Output language</p>
+                      <LanguagePicker value={selectedLanguage} onChange={setSelectedLanguage} label={false} />
+                    </div>
+
+                    {phase === 'done' && (
+                      <button
+                        onClick={handleRegenerate}
+                        className="w-full py-2 rounded-lg text-xs font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Regenerate
+                      </button>
+                    )}
+                    {(phase === 'idle' || phase === 'error') && (
+                      <button
+                        onClick={() => startFlow()}
+                        className="w-full py-2.5 rounded-lg text-xs font-semibold text-white flex items-center justify-center gap-2 hover:opacity-90 transition-opacity active:scale-[0.98]"
+                        style={{ background: 'linear-gradient(135deg,#2563EB,#38BDF8)' }}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        Generate with Alex
+                      </button>
+                    )}
+                    {(phase === 'analyzing' || phase === 'generating' || phase === 'questioning') && (
+                      <div className="flex items-center gap-2 py-0.5">
+                        <div className="flex gap-1">
+                          {[0, 100, 200].map(d => (
+                            <span key={d} className="w-1.5 h-1.5 bg-apex-blue/60 rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />
+                          ))}
+                        </div>
+                        <span className="text-[11px] text-slate-400">
+                          {phase === 'analyzing' ? 'Analyzing…' : phase === 'generating' ? 'Generating…' : 'Awaiting answers…'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
               </div>
 
               {/* ─ RIGHT COLUMN ───────────────────────────────────────────── */}
@@ -1728,45 +1786,68 @@ Then output one short sentence (max 15 words) describing what you changed, start
 
                 {/* Idle */}
                 {phase === 'idle' && (
-                  <div className="flex-1 bg-white rounded-xl border border-slate-200 flex flex-col items-center justify-center p-8 text-center gap-5">
-                    <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-apex-blue to-apex-cyan flex items-center justify-center shadow-sm">
-                      <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                      </svg>
+                  <div className="flex-1 bg-white rounded-xl border border-slate-200 flex flex-col items-center justify-center p-10 text-center gap-6">
+                    {/* Icon cluster */}
+                    <div className="relative">
+                      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-apex-blue to-apex-cyan flex items-center justify-center shadow-md shadow-blue-500/20">
+                        <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-white border-2 border-white shadow-sm flex items-center justify-center"
+                        style={{ background: 'linear-gradient(135deg,#2563EB,#38BDF8)' }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="white">
+                          <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" />
+                        </svg>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-semibold text-slate-800 mb-1">Pronto per la personalizzazione</p>
-                      <p className="text-sm text-slate-500 max-w-xs">Alex riscriverà il tuo CV e preparerà una lettera di presentazione su misura per questo ruolo.</p>
+
+                    <div className="max-w-xs">
+                      <p className="font-semibold text-slate-800 text-base mb-2">Ready to tailor</p>
+                      <p className="text-sm text-slate-400 leading-relaxed">
+                        Alex will rewrite your CV and craft a cover letter aligned to this specific role and company.
+                      </p>
                     </div>
-                    <button
-                      onClick={() => startFlow()}
-                      className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold text-white shadow-sm shadow-blue-500/20 hover:opacity-90 transition-opacity"
-                      style={{ background: 'linear-gradient(135deg,#2563EB,#38BDF8)' }}
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
-                      Genera con Alex
-                    </button>
+
+                    {/* What Alex does */}
+                    <div className="flex flex-col gap-2 w-full max-w-xs text-left">
+                      {[
+                        { icon: 'M5 13l4 4L19 7', label: 'ATS keyword optimisation' },
+                        { icon: 'M13 10V3L4 14h7v7l9-11h-7z', label: 'Tone matched to company culture' },
+                        { icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z', label: 'Personalised cover letter' },
+                      ].map(({ icon, label }) => (
+                        <div key={label} className="flex items-center gap-2.5">
+                          <div className="w-5 h-5 rounded-md bg-blue-50 flex items-center justify-center flex-shrink-0">
+                            <svg className="w-3 h-3 text-apex-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon} />
+                            </svg>
+                          </div>
+                          <span className="text-xs text-slate-500">{label}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <p className="text-xs text-slate-400 mt-1">
+                      Set your output language on the left, then click{' '}
+                      <span className="font-semibold text-slate-600">Generate with Alex</span>.
+                    </p>
                   </div>
                 )}
 
                 {/* Analyzing */}
                 {phase === 'analyzing' && (
-                  <div className="flex-1 bg-white rounded-xl border border-slate-200 flex items-center justify-center p-8">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-apex-blue to-apex-cyan flex items-center justify-center flex-shrink-0 shadow-sm">
-                        <span className="text-white font-bold text-xs">A</span>
+                  <div className="flex-1 bg-white rounded-xl border border-slate-200 flex flex-col items-center justify-center p-8 gap-4">
+                    <div className="relative">
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-apex-blue to-apex-cyan flex items-center justify-center shadow-md shadow-blue-500/20">
+                        <span className="text-white font-bold text-sm">A</span>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-slate-700">Alex sta analizzando…</p>
-                        <p className="text-xs text-slate-400">Lettura del CV e della descrizione del ruolo</p>
-                      </div>
-                      <div className="flex gap-1 ml-1">
-                        {[0, 150, 300].map(d => (
-                          <span key={d} className="w-1.5 h-1.5 bg-apex-blue rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />
-                        ))}
-                      </div>
+                      <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-white border-2 border-white flex items-center justify-center">
+                        <span className="w-2 h-2 bg-apex-cyan rounded-full animate-ping" />
+                      </span>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-semibold text-slate-700 mb-1">Reading the job description…</p>
+                      <p className="text-xs text-slate-400">Alex checks if any clarifying questions would improve the output</p>
                     </div>
                   </div>
                 )}
@@ -1774,42 +1855,42 @@ Then output one short sentence (max 15 words) describing what you changed, start
                 {/* Questioning */}
                 {phase === 'questioning' && (
                   <div className="flex-1 bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col">
-                    <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-3 flex-shrink-0">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-apex-blue to-apex-cyan flex items-center justify-center flex-shrink-0 shadow-sm">
+                    <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3 flex-shrink-0 bg-slate-50/40">
+                      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-apex-blue to-apex-cyan flex items-center justify-center flex-shrink-0 shadow-sm">
                         <span className="text-white font-bold text-xs">A</span>
                       </div>
                       <div>
-                        <p className="font-semibold text-slate-800 text-sm">Prima di iniziare, ho alcune domande</p>
-                        <p className="text-xs text-slate-400">Rispondimi per un risultato migliore — oppure salta direttamente alla generazione</p>
+                        <p className="font-semibold text-slate-800 text-sm">A couple of quick questions</p>
+                        <p className="text-xs text-slate-400">Answer to improve accuracy — or skip straight to generation</p>
                       </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                    <div className="flex-1 overflow-y-auto p-5 space-y-3">
                       {questions.map((q, i) => (
-                        <div key={i} className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                          <p className="text-sm font-medium text-slate-800 mb-2">{i + 1}. {q}</p>
+                        <div key={i} className="rounded-xl p-4 border border-slate-100 bg-slate-50/60">
+                          <p className="text-sm font-medium text-slate-700 mb-2.5">{i + 1}. {q}</p>
                           <textarea
                             value={answers[q] || ''}
                             onChange={e => setAnswers(prev => ({ ...prev, [q]: e.target.value }))}
-                            placeholder="La tua risposta…"
+                            placeholder="Your answer…"
                             rows={3}
-                            className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-700 placeholder-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-apex-blue focus:border-transparent resize-none"
+                            className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm text-slate-700 placeholder-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-apex-blue/20 focus:border-apex-blue/40 resize-none transition-all"
                           />
                         </div>
                       ))}
                     </div>
-                    <div className="flex-shrink-0 px-6 py-4 border-t border-slate-100 flex flex-col items-center gap-2">
+                    <div className="flex-shrink-0 px-5 py-4 border-t border-slate-100 flex flex-col gap-3">
                       <button
                         onClick={() => generate(answers)}
-                        className="w-full py-2.5 rounded-xl text-sm font-semibold text-white shadow-sm shadow-blue-500/20 hover:opacity-90 transition-opacity"
+                        className="w-full py-2.5 rounded-xl text-sm font-semibold text-white hover:opacity-90 transition-opacity active:scale-[0.98]"
                         style={{ background: 'linear-gradient(135deg,#2563EB,#38BDF8)' }}
                       >
-                        Genera ora
+                        Generate now
                       </button>
                       <button
                         onClick={() => generate({})}
-                        className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
+                        className="text-xs text-slate-400 hover:text-slate-600 transition-colors text-center"
                       >
-                        Salta e genera
+                        Skip and generate
                       </button>
                     </div>
                   </div>
@@ -1837,16 +1918,16 @@ Then output one short sentence (max 15 words) describing what you changed, start
                   <div className="flex-1 min-h-0 bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col">
 
                     {/* Doc tab bar */}
-                    <div className="flex items-center border-b border-slate-200 px-1 flex-shrink-0">
+                    <div className="flex items-center border-b border-slate-200 px-1 flex-shrink-0 bg-slate-50/40">
                       {[
                         { key: 'cv',    label: 'Tailored CV' },
                         { key: 'cover', label: 'Cover Letter' },
                       ].map(({ key, label }) => (
                         <button key={key} onClick={() => setActiveDocTab(key)}
-                          className={`px-5 py-3.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                          className={`px-5 py-3.5 text-sm font-semibold transition-all border-b-2 -mb-px ${
                             activeDocTab === key
-                              ? 'text-apex-blue border-apex-blue'
-                              : 'text-slate-400 border-transparent hover:text-slate-700'
+                              ? 'text-apex-blue border-apex-blue bg-white/60'
+                              : 'text-slate-400 border-transparent hover:text-slate-600 hover:bg-white/40'
                           }`}>
                           {label}
                         </button>

@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { apiFetch, PlanLimitError } from '../lib/apiFetch'
 import LimitReachedModal from '../components/LimitReachedModal'
 import posthog from 'posthog-js'
+import { HEC_KNOWLEDGE } from '../lib/hecKnowledge'
 
 // ─── State persistence ────────────────────────────────────────────────────────
 const ALEX_KEY = 'apex_alex_state'
@@ -125,7 +126,10 @@ async function streamAlex({ messages, systemPrompt, onChunk, onDone, onError, on
       signal: controller.signal,
       body: JSON.stringify({
         messages,
-        systemPrompt: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+        systemPrompt: [
+          { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } },
+          { type: 'text', text: HEC_KNOWLEDGE, cache_control: { type: 'ephemeral' } },
+        ],
         stream: true,
         maxTokens: 2048,
       }),

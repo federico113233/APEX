@@ -9,6 +9,7 @@
 // events are forwarded to the client over SSE.
 
 import Anthropic from '@anthropic-ai/sdk'
+import { HEC_KNOWLEDGE } from './hecKnowledge.js'
 
 const MODEL = 'claude-sonnet-4-6'       // orchestrator (Alex)
 const FAST_MODEL = 'claude-haiku-4-5'   // sub-agents — much lower latency
@@ -64,12 +65,12 @@ export async function runResearchAgent(client, { company, focus }) {
 
 const REVIEW_SYSTEM = `You are the Document Quality Agent inside APEX, a job application platform for students. You work for Alex, the lead career advisor, who delegates CV and cover letter reviews to you.
 
-You are a senior recruiter and ATS expert. Evaluate the document on:
-1. Structure & readability — sections, ordering, scannability
-2. Impact — quantified achievements vs. duty-listing, strong action verbs
+You are a senior recruiter and ATS expert trained on HEC Paris career centre standards. Evaluate the document on:
+1. Structure & readability — sections, ordering, scannability, ATS compatibility
+2. Impact — quantified achievements vs. duty-listing, strong specific action verbs (CAR method)
 3. Relevance & keyword match — alignment with the job description (ATS perspective), if provided
-4. Tone & professionalism — appropriate for the role and seniority
-5. Red flags — gaps, vagueness, clichés, typos, length problems
+4. Tone & professionalism — appropriate for the role, sector, and seniority
+5. Red flags — vague verbs (Worked/Helped/Assisted), missing quantifiers, clichés, gaps, length problems
 
 Return, in this order:
 - **Score**: an honest overall score out of 100
@@ -77,7 +78,9 @@ Return, in this order:
 - **Issues**: problems ordered by severity, each with a concrete, line-level fix
 - **Verdict**: one sentence on whether it is ready to send for this role
 
-Keep it under ~250 words. Be honest and specific — vague praise helps no one.`
+Keep it under ~250 words. Be honest and specific — vague praise helps no one.
+
+${HEC_KNOWLEDGE}`
 
 export async function runReviewAgent(client, { docType, document, jobDescription }) {
   const response = await client.messages.create({

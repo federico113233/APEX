@@ -10,6 +10,7 @@ import { supabase } from '../lib/supabase'
 import { apiFetch, PlanLimitError } from '../lib/apiFetch'
 import LimitReachedModal from '../components/LimitReachedModal'
 import posthog from 'posthog-js'
+import { HEC_KNOWLEDGE } from '../lib/hecKnowledge'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const MODEL = 'claude-sonnet-4-6'
@@ -1190,7 +1191,10 @@ export default function TailoringLab() {
             role: 'user',
             content: `CV:\n${user.cvText?.trim() || 'Not provided'}\n\nJob title: ${activeJob.title}\nCompany: ${activeJob.company}\nJob description: ${activeJob.description || 'Not provided'}\n\nDo you need any clarifying information to tailor this CV optimally? If yes, list max 3 specific questions. If no, output NO_QUESTIONS.`,
           }],
-          systemPrompt: ANALYSIS_SYSTEM_PROMPT,
+          systemPrompt: [
+            { type: 'text', text: ANALYSIS_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
+            { type: 'text', text: HEC_KNOWLEDGE, cache_control: { type: 'ephemeral' } },
+          ],
           stream: false,
           maxTokens: 500,
         }),
@@ -1232,7 +1236,10 @@ export default function TailoringLab() {
         signal: controller.signal,
         body: JSON.stringify({
           messages: [{ role: 'user', content: buildUserMessage(user, activeJob, currentAnswers, selectedLanguage) }],
-          systemPrompt: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+          systemPrompt: [
+            { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
+            { type: 'text', text: HEC_KNOWLEDGE, cache_control: { type: 'ephemeral' } },
+          ],
           stream: true,
           maxTokens: 4096,
         }),
@@ -1378,11 +1385,14 @@ export default function TailoringLab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: [{ role: 'user', content: `Here is the current ${docType}:\n\n${doc}${jobContext}\n\nUser request: ${req}\n\nPlease apply the edit and return the full modified ${docType}.` }],
-          systemPrompt: `You are Alex, an expert CV and cover letter editor. The user wants you to edit their ${docType}.
+          systemPrompt: [
+            { type: 'text', text: `You are Alex, an expert CV and cover letter editor trained on HEC Paris career centre standards. The user wants you to edit their ${docType}.
 YOUR AGENT TEAM: you can delegate via tools before writing the final document — use review_document to get a specialist quality assessment of the current ${docType} when the request is about overall quality, impact, or keyword match; use research_company when tailoring to the company would benefit from up-to-date facts about it. Use them only when they genuinely improve the edit, then apply what you learned.
 OUTPUT CONTRACT (strict): return ONLY the modified document text — no explanations, no preamble, no markdown code blocks, just the document.
 After the document, output exactly: |||ALEX_MSG|||
-Then output one short sentence (max 15 words) describing what you changed, starting with "Done!"`,
+Then output one short sentence (max 15 words) describing what you changed, starting with "Done!"`, cache_control: { type: 'ephemeral' } },
+            { type: 'text', text: HEC_KNOWLEDGE, cache_control: { type: 'ephemeral' } },
+          ],
           stream: true,
           maxTokens: 4096,
           agentic: true,

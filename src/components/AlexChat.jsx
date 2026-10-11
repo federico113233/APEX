@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { useUser } from '../context/UserContext'
 import { apiFetch, PlanLimitError } from '../lib/apiFetch'
 import LimitReachedModal from './LimitReachedModal'
+import { HEC_KNOWLEDGE } from '../lib/hecKnowledge'
 
 async function* parseSSE(response) {
   const reader = response.body.getReader()
@@ -195,7 +196,10 @@ export default function AlexChat() {
         signal: controller.signal,
         body: JSON.stringify({
           messages: historyRef.current,
-          systemPrompt: [{ type: 'text', text: buildSystemPrompt(user, applications), cache_control: { type: 'ephemeral' } }],
+          systemPrompt: [
+            { type: 'text', text: buildSystemPrompt(user, applications), cache_control: { type: 'ephemeral' } },
+            { type: 'text', text: HEC_KNOWLEDGE, cache_control: { type: 'ephemeral' } },
+          ],
           stream: true,
           maxTokens: 1024,
         }),
